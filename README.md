@@ -16,10 +16,11 @@ It uses Spotify's Web API with **Authorization Code + PKCE**, so no Spotify clie
 
 4. Copy the app's **Client ID**.
 
-The script requests these scopes:
+The scripts may request these scopes depending on the operation:
 
 - `playlist-modify-private`
 - `playlist-modify-public`
+- `playlist-read-private`
 
 ## Local setup
 
@@ -38,6 +39,29 @@ Edit `.env` and replace `your_client_id_here` with the Spotify Client ID.
 
 `.env` is already ignored by Git.
 
+## Sharing / installing for another user
+
+Each user should create **their own Spotify Developer app** and use their own Client ID. This keeps Spotify authorization and account access separate while allowing everyone to use the same repository and playlist files.
+
+For another user:
+
+1. Clone this repository.
+2. Create a Spotify app in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/).
+3. Enable the Web API and add `http://127.0.0.1:8888/callback` as the Redirect URI.
+4. Copy `.env.example` to `.env`.
+5. Put that app's Client ID in `.env` as `SPOTIFY_CLIENT_ID`.
+6. Create/activate the Python virtual environment and install `requirements.txt` as shown above.
+7. Run the desired playlist command. A browser will open and the user signs into **their own Spotify account** and approves access.
+
+No Client Secret needs to be shared or stored. This project uses PKCE.
+
+The following files are intentionally local and should not be committed:
+
+- `.env` — contains the user's Spotify app Client ID/configuration.
+- `~/.cache/spotify-gpt/token.json` — contains that user's Spotify OAuth tokens and lives outside the repository.
+
+Spotify Development Mode has account/app restrictions and is intended for development and personal projects. Having each person create their own developer app avoids sharing one app's user allowance and keeps credentials/account authorization isolated.
+
 ## Create the included playlist
 
 The repo includes `playlists/sludge-with-grind-brain.txt`.
@@ -55,6 +79,19 @@ python spotify_playlist.py
 ```
 
 By default it creates a **private** playlist named `Sludge With Grind Brain`.
+
+## Sync an existing playlist
+
+`sync_playlist.py` adds tracks from the track-list file that are not already in an existing playlist. It does not intentionally duplicate tracks already present.
+
+For example, to update the renamed `Sludge Grinder` playlist:
+
+```bash
+python sync_playlist.py --name "Sludge Grinder" --dry-run
+python sync_playlist.py --name "Sludge Grinder"
+```
+
+The first sync may open Spotify authorization again because syncing a private playlist requires `playlist-read-private` in addition to the playlist modification scopes.
 
 ## Create another playlist
 
@@ -96,7 +133,9 @@ python spotify_playlist.py --dry-run
 ## Current Spotify API endpoints used
 
 - `GET /search` — resolve artist/title pairs to Spotify tracks
-- `POST /me/playlists` — create the playlist
+- `GET /me/playlists` — find an existing playlist for sync
+- `GET /playlists/{playlist_id}/items` — read existing playlist items for deduplication
+- `POST /me/playlists` — create a playlist
 - `POST /playlists/{playlist_id}/items` — add up to 100 items per request
 
 The older `/playlists/{playlist_id}/tracks` add-tracks endpoint is deprecated; this project uses the current `/items` endpoint.
