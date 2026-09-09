@@ -38,6 +38,11 @@ def parse_args() -> argparse.Namespace:
         help="Spotify playlist ID; skips lookup by name",
     )
     parser.add_argument(
+        "--description",
+        default=None,
+        help="Spotify playlist description; overrides '# Description:' metadata in the source file",
+    )
+    parser.add_argument(
         "--exact",
         action="store_true",
         help="Make the Spotify playlist exactly match the resolved source file, including removals and order",
@@ -88,6 +93,14 @@ def find_playlist(token: str, name: str) -> dict | None:
     return matches[0]
 
 
+def get_playlist(token: str, playlist_id: str) -> dict:
+    return spotify.api_request(
+        "GET",
+        f"/playlists/{playlist_id}",
+        token,
+    ).json()
+
+
 def get_existing_uris(token: str, playlist_id: str) -> list[str]:
     uris: list[str] = []
     offset = 0
@@ -127,6 +140,15 @@ def replace_items(token: str, playlist_id: str, uris: list[str]) -> None:
         spotify.add_items(token, playlist_id, uris[100:])
 
 
+def update_description(token: str, playlist_id: str, description: str) -> None:
+    spotify.api_request(
+        "PUT",
+        f"/playlists/{playlist_id}",
+        token,
+        json={"description": description},
+    )
+
+
 def main() -> int:
     args = parse_args()
 
@@ -135,12 +157,16 @@ def main() -> int:
             "SPOTIFY_CLIENT_ID is not set. Add it to .env before running sync."
         )
 
-    requested_tracks = spotify.load_track_requests(Path(args.input))
+    source_path = Path(args.input)
+    requested_tracks = spotify.load_track_requests(source_path)
+    source_description = spotify.load_playlist_description(source_path)
+    desired_description = args.description if args.description is not None else source_description
     token = get_scoped_token()
 
     if args.playlist_id:
+        playlist = get_playlist(token, args.playlist_id)
         playlist_id = args.playlist_id
-        playlist_name = args.name
+        playlist_name = playlist.get("name", args.name)
     else:
         playlist = find_playlist(token, args.name)
         if not playlist:
@@ -150,13 +176,24 @@ def main() -> int:
         playlist_id = playlist["id"]
         playlist_name = playlist.get("name", args.name)
 
+    current_description = playlist.get("description") or ""
+    description_changed = (
+        desired_description is not None and desired_description != current_description
+    )
+
     existing_uris = get_existing_uris(token, playlist_id)
     existing_set = set(existing_uris)
     resolved: list[dict] = []
     additions: list[dict] = []
     missing = []
 
-    print(f"Playlist: {playlist_name} ({len(existing_uris)} existing items)\n")
+    print(f"Playlist: {playlist_name} ({len(existing_uris)} existing items)")
+    if desired_description is not None:
+        status = "UPDATE" if description_changed else "KEEP"
+        print(f"{status} description: {desired_description}")
+    else:
+        print("KEEP description: no # Description: metadata in source file")
+    print()
 
     for requested in requested_tracks:
         track = spotify.search_track(token, requested)
@@ -182,7 +219,7 @@ def main() -> int:
     print(
         f"\nExisting: {len(existing_uris)} | Resolved: {len(resolved)} | "
         f"New: {len(additions)} | Remove: {len(removals) if args.exact else 0} | "
-        f"Unresolved: {len(missing)}"
+        f"Unresolved: {len(missing)} | Description: {'update' if description_changed else 'keep'}"
     )
 
     if args.exact and missing:
@@ -192,8 +229,14 @@ def main() -> int:
         if args.exact:
             print("Dry run: exact sync would replace playlist contents with the resolved source order.")
         else:
-            print("Dry run: add-only sync would not modify Spotify.")
+            print("Dry run: add-only sync would not modify playlist tracks.")
+        if description_changed:
+            print("Dry run: playlist description would also be updated.")
         return 0
+
+    if description_changed:
+        update_description(token, playlist_id, desired_description)
+        print(f"Updated description for {playlist_name!r}.")
 
     if args.exact:
         replace_items(token, playlist_id, desired_uris)
@@ -202,7 +245,7 @@ def main() -> int:
         spotify.add_items(token, playlist_id, [track["uri"] for track in additions])
         print(f"Added {len(additions)} tracks to {playlist_name!r}.")
     else:
-        print("Playlist is already up to date for add-only sync.")
+        print("Playlist tracks are already up to date for add-only sync.")
 
     if missing:
         print("\nCould not confidently resolve:")
