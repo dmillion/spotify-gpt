@@ -1,4 +1,5 @@
 # Badlands
+# Description: Heavy, driving alternative rock built around Black Foxxes' "Badlands" — chunky riffs, hard-pushing rhythm sections, fuzz, repetition, tension, and sustained momentum.
 # Revised around Black Foxxes' "Badlands": heavy, driving, hypnotic alternative rock.
 # Priority: chunky riffs, hard-pushing drums/bass, fuzz, repetition, tension, and sustained momentum.
 # Avoid softer atmospheric/shoegaze picks unless they still hit with real weight.
