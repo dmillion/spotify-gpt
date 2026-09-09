@@ -1,3 +1,5 @@
+# Sludge Grinder
+# Description: Slow, filthy, riff-forward sludge with grind and hardcore DNA — Agoraphobic Nosebleed, Pig Destroyer, Brainoil, NOLA sludge, and hard-driving crossover.
 # One track per line: Artist | Title
 # Original grind/sludge spine
 Agoraphobic Nosebleed | Not a Daughter
