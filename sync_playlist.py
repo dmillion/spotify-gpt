@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Sync a track-list file into an existing Spotify playlist without duplicates."""
+"""Sync a track-list file into an existing Spotify playlist."""
 
 from __future__ import annotations
 
 import argparse
 import sys
-import time
 from pathlib import Path
 
 import requests
@@ -21,7 +20,7 @@ REQUIRED_SCOPES = {
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Add missing tracks from an Artist | Title file to an existing playlist."
+        description="Sync an Artist | Title file into an existing Spotify playlist."
     )
     parser.add_argument(
         "input",
@@ -39,9 +38,14 @@ def parse_args() -> argparse.Namespace:
         help="Spotify playlist ID; skips lookup by name",
     )
     parser.add_argument(
+        "--exact",
+        action="store_true",
+        help="Make the Spotify playlist exactly match the resolved source file, including removals and order",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Resolve tracks and show additions without modifying Spotify",
+        help="Resolve tracks and show planned changes without modifying Spotify",
     )
     return parser.parse_args()
 
@@ -84,8 +88,8 @@ def find_playlist(token: str, name: str) -> dict | None:
     return matches[0]
 
 
-def get_existing_uris(token: str, playlist_id: str) -> set[str]:
-    uris: set[str] = set()
+def get_existing_uris(token: str, playlist_id: str) -> list[str]:
+    uris: list[str] = []
     offset = 0
 
     while True:
@@ -102,13 +106,25 @@ def get_existing_uris(token: str, playlist_id: str) -> set[str]:
             item = row.get("item") or row.get("track") or {}
             uri = item.get("uri")
             if uri:
-                uris.add(uri)
+                uris.append(uri)
 
         if not payload.get("next") or not rows:
             break
         offset += len(rows)
 
     return uris
+
+
+def replace_items(token: str, playlist_id: str, uris: list[str]) -> None:
+    first = uris[:100]
+    spotify.api_request(
+        "PUT",
+        f"/playlists/{playlist_id}/items",
+        token,
+        json={"uris": first},
+    )
+    if len(uris) > 100:
+        spotify.add_items(token, playlist_id, uris[100:])
 
 
 def main() -> int:
@@ -135,6 +151,8 @@ def main() -> int:
         playlist_name = playlist.get("name", args.name)
 
     existing_uris = get_existing_uris(token, playlist_id)
+    existing_set = set(existing_uris)
+    resolved: list[dict] = []
     additions: list[dict] = []
     missing = []
 
@@ -147,30 +165,44 @@ def main() -> int:
             print(f"MISSING {requested.artist} - {requested.title}")
             continue
 
+        resolved.append(track)
         artists = ", ".join(artist["name"] for artist in track.get("artists", []))
         score = spotify.track_score(track, requested)
 
-        if track["uri"] in existing_uris:
+        if track["uri"] in existing_set:
             print(f"KEEP    {artists} - {track['name']}")
-            continue
+        else:
+            additions.append(track)
+            print(f"ADD     {artists} - {track['name']}  [{score:.0%} match]")
 
-        additions.append(track)
-        print(f"ADD     {artists} - {track['name']}  [{score:.0%} match]")
+    desired_uris = [track["uri"] for track in resolved]
+    desired_set = set(desired_uris)
+    removals = [uri for uri in existing_uris if uri not in desired_set]
 
     print(
-        f"\nExisting: {len(existing_uris)} | New: {len(additions)} | "
+        f"\nExisting: {len(existing_uris)} | Resolved: {len(resolved)} | "
+        f"New: {len(additions)} | Remove: {len(removals) if args.exact else 0} | "
         f"Unresolved: {len(missing)}"
     )
 
+    if args.exact and missing:
+        print("\nWARNING: --exact will omit unresolved source tracks from Spotify.")
+
     if args.dry_run:
-        print("Dry run: playlist not modified.")
+        if args.exact:
+            print("Dry run: exact sync would replace playlist contents with the resolved source order.")
+        else:
+            print("Dry run: add-only sync would not modify Spotify.")
         return 0
 
-    if additions:
+    if args.exact:
+        replace_items(token, playlist_id, desired_uris)
+        print(f"Replaced contents of {playlist_name!r} with {len(desired_uris)} resolved tracks.")
+    elif additions:
         spotify.add_items(token, playlist_id, [track["uri"] for track in additions])
         print(f"Added {len(additions)} tracks to {playlist_name!r}.")
     else:
-        print("Playlist is already up to date.")
+        print("Playlist is already up to date for add-only sync.")
 
     if missing:
         print("\nCould not confidently resolve:")
