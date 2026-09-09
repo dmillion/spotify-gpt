@@ -1,38 +1,46 @@
 # Badlands
-# Built around Black Foxxes' "Badlands": tense, beat-driven alt-rock with fuzzy/shoegaze texture,
-# post-punk repetition, emotional weight, and long dynamic builds.
+# Revised around Black Foxxes' "Badlands": heavy, driving, hypnotic alternative rock.
+# Priority: chunky riffs, hard-pushing drums/bass, fuzz, repetition, tension, and sustained momentum.
+# Avoid softer atmospheric/shoegaze picks unless they still hit with real weight.
 
 # Anchor
 Black Foxxes | Badlands
 
-# Closest modern relatives: angular, heavy, atmospheric
-Arcane Roots | Curtains
-Arcane Roots | Matter
-Black Peaks | Glass Built Castles
-Black Peaks | Home
-Lonely the Brave | The Blue, The Green
-Lonely the Brave | Trick of the Light
-Teenage Wrist | Stoned, Alone
-Teenage Wrist | Earth Is a Black Hole
-Boston Manor | Halo
-Boston Manor | Foxglove
-Nothing But Thieves | Itch
-
-# Brooding repetition / post-punk pulse
-Placebo | Without You I'm Nothing
-Placebo | Meds
-Radiohead | Myxomatosis
-Radiohead | Bodysnatchers
-Blood Red Shoes | Cold
-Blood Red Shoes | An Animal
-
-# Fuzz, space, and slow-burn payoff
-Failure | Another Space Song
-Hum | Stars
-Queens of the Stone Age | I Appear Missing
+# Closest lane: heavy UK alt-rock with sustained drive
+Tigercub | Control
+Tigercub | As Blue As Indigo
 Tigercub | Beauty
+Demob Happy | Be Your Man
 Demob Happy | Dead Dreamers
+Demob Happy | Succubus
+Drenge | Bloodsports
+Drenge | Backwaters
+Drenge | We Can Do What We Want
+Pulled Apart By Horses | V.E.N.O.M.
+Pulled Apart By Horses | High Five, Swan Dive, Nose Dive
+Black Peaks | Glass Built Castles
+Black Peaks | Say You Will
 
-# Same Black Foxxes era, keeping the playlist tied to the source atmosphere
-Black Foxxes | I Am
-Black Foxxes | The Diving Bell
+# Riff-driven, repetitive, and propulsive
+Royal Blood | Out of the Black
+Royal Blood | Figure It Out
+Queens of the Stone Age | Song for the Dead
+Queens of the Stone Age | The Evil Has Landed
+Muse | Dead Star
+Muse | Stockholm Syndrome
+Reuben | Stuck in My Throat
+Jamie Lenman | Fizzy Blood
+Blood Red Shoes | An Animal
+Blood Red Shoes | I Wish I Was Someone Better
+
+# Dirtier/noisier edge without losing the groove
+METZ | Acetate
+METZ | Cellophane
+The Wytches | Gravedweller
+The Wytches | Digsaw
+Death From Above 1979 | Turn It Out
+Death From Above 1979 | Trainwreck 1979
+
+# Same band, closer to the aggressive side
+Black Foxxes | Manic in Me
+Black Foxxes | Husk
