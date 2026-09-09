@@ -37,6 +37,7 @@ API_BASE = "https://api.spotify.com/v1"
 
 DEFAULT_TOKEN_FILE = Path.home() / ".cache" / "spotify-gpt" / "token.json"
 TOKEN_FILE = Path(os.environ.get("SPOTIFY_TOKEN_FILE", DEFAULT_TOKEN_FILE)).expanduser()
+DEFAULT_DESCRIPTION = "Curated with spotify-gpt."
 
 
 @dataclass(frozen=True)
@@ -66,11 +67,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--description",
-        default=(
-            "Slow, filthy, riff-forward sludge with grind/hardcore DNA: "
-            "Agoraphobic Nosebleed, Pig Destroyer, Beggar-adjacent territory."
-        ),
-        help="Spotify playlist description",
+        default=None,
+        help="Spotify playlist description; overrides '# Description:' metadata in the source file",
     )
     parser.add_argument(
         "--public",
@@ -83,6 +81,24 @@ def parse_args() -> argparse.Namespace:
         help="Resolve tracks but do not create a playlist",
     )
     return parser.parse_args()
+
+
+def load_playlist_description(path: Path) -> str | None:
+    """Read a '# Description: ...' metadata line from a playlist definition."""
+    if not path.exists():
+        raise SpotifyError(f"Track list not found: {path}")
+
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if not line.startswith("#"):
+            break
+        comment = line[1:].strip()
+        if comment.casefold().startswith("description:"):
+            description = comment.split(":", 1)[1].strip()
+            return description or None
+    return None
 
 
 def load_track_requests(path: Path) -> list[TrackRequest]:
@@ -375,11 +391,16 @@ def main() -> int:
             "SPOTIFY_CLIENT_ID is not set. Copy .env.example to .env and add your Client ID."
         )
 
-    requested_tracks = load_track_requests(Path(args.input))
+    source_path = Path(args.input)
+    requested_tracks = load_track_requests(source_path)
+    source_description = load_playlist_description(source_path)
+    description = args.description if args.description is not None else (source_description or DEFAULT_DESCRIPTION)
     token = get_access_token()
 
     found: list[dict] = []
     missing: list[TrackRequest] = []
+
+    print(f"Description: {description}\n")
 
     for requested in requested_tracks:
         track = search_track(token, requested)
@@ -404,7 +425,7 @@ def main() -> int:
     playlist = create_playlist(
         token,
         name=args.name,
-        description=args.description,
+        description=description,
         public=args.public,
     )
     add_items(token, playlist["id"], [track["uri"] for track in found])
