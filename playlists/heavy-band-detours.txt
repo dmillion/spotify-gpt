@@ -1,6 +1,6 @@
 # Heavy Band Detours
 # Description: Backroad riffs, dim barroom light, burnt-out amplifiers, and the strange hours after the volume drops.
-# Heavy bands stepping sideways rather than simply playing slower doom. Avoid static ambient/dirge tracks.
+# Heavy bands stepping sideways without losing the weight. Keep a real riff, thick tone, groove, or heavy payoff.
 
 # Anchors
 Weedeater | Woe's Me
@@ -9,14 +9,14 @@ Droids Attack | The John Oates Mustache Ride
 
 # Weedeater's strange comedown lane
 Weedeater | Tuesday Night
-Weedeater | Willow
 Weedeater | Kira May
+Weedeater | For Evan's Sake
+Weedeater | Gimme Back My Bullets
 
-# Southern / blues / country detours with real groove
+# Southern / blues / country detours that still hit
 Corrosion Of Conformity | Stare Too Long
 DOWN | Jail
-Acid Bath | Scream of the Butterfly
-Acid Bath | The Bones of Baby Dolls
+DOWN | Learn from This Mistake
 Clutch | Regulator
 Clutch | Spacegrass
 Orange Goblin | Time Travelling Blues
@@ -24,14 +24,15 @@ Orange Goblin | Lothlorian
 Alabama Thunderpussy | Words of the Dying Man
 Black Label Society | Spoke in the Wheel
 Bongzilla | Champagne & Reefer
+Dopethrone | Scum Fuck Blues
+Cavity | Supercollider
 
-# Acoustic / melodic left turns that still develop
+# Melodic or off-kilter left turns with real guitar weight
 Melvins | Goose Freight Train
 Soilent Green | In the Same Breath
 Mastodon | Pendulous Skin
 Baroness | Stretchmarker
 Corrosion Of Conformity | 13 Angels
-Pentagram | A Timeless Heart
 Uncle Acid & The Deadbeats | Devil's Work
 
 # Psychedelic / slow-burn oddities with a riff or pulse
@@ -41,7 +42,6 @@ Red Fang | Human Herd
 Kylesa | Falling
 Torche | Restarter
 Melvins | Going Blind
-Kyuss | Space Cadet
 
 # Strange, subdued or unexpectedly melodic heaviness that still moves
 Eyehategod | Southern Discomfort
