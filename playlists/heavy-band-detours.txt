@@ -1,6 +1,6 @@
 # Heavy Band Detours
-# Description: Oddball slow, bluesy, acoustic, country-tinged and psychedelic detours from bands that normally hit much harder — barroom blues, porch riffs, piano, twang and late-night comedown songs.
-# Heavy bands stepping sideways rather than simply playing slower doom.
+# Description: Weird slow, bluesy, acoustic, country-tinged and psychedelic detours from heavy bands — but every track still earns its place with a riff, groove, beat, or a real musical payoff.
+# Heavy bands stepping sideways rather than simply playing slower doom. Avoid static ambient/dirge tracks.
 
 # Anchors
 Weedeater | Woe's Me
@@ -12,33 +12,31 @@ Weedeater | Tuesday Night
 Weedeater | Willow
 Weedeater | Kira May
 
-# Southern / blues / country detours
+# Southern / blues / country detours with real groove
 Corrosion Of Conformity | Stare Too Long
 DOWN | Jail
 Acid Bath | Scream of the Butterfly
-Acid Bath | Dead Girl
 Clutch | Regulator
+Clutch | Spacegrass
 Orange Goblin | Time Travelling Blues
 Alabama Thunderpussy | Words of the Dying Man
 Black Label Society | Spoke in the Wheel
 
-# Acoustic, folk and porch-adjacent left turns
+# Acoustic / melodic left turns that still develop
 Melvins | Goose Freight Train
 Soilent Green | In the Same Breath
-Neurosis | Away
 Mastodon | Pendulous Skin
-Mastodon | The Sparrow
 Baroness | Stretchmarker
+Corrosion Of Conformity | 13 Angels
 
-# Psychedelic / slow-burn heavy-band oddities
-Pantera | Planet Caravan
-Crowbar | Odd Fellows Rest
+# Psychedelic / slow-burn oddities with a riff or pulse
 High On Fire | King of Days
 Red Fang | Human Herd
 Kylesa | Falling
 Torche | Restarter
+Melvins | Going Blind
 
-# Strange, subdued or unexpectedly melodic heaviness
+# Strange, subdued or unexpectedly melodic heaviness that still moves
 Eyehategod | Southern Discomfort
 Buzzov•en | Don't Bring Me Down
 16 | Her Little Accident
