@@ -55,6 +55,28 @@ Another Artist | Another Track
 8. Commit the resulting playlist-file change to GitHub.
 9. Tell the user the simple local command needed to create or sync the correct playlist.
 
+## User-facing command convention
+
+Whenever giving the user terminal commands to run this project, always start by activating the repository virtual environment and updating the local checkout:
+
+```bash
+source .venv/bin/activate
+git pull
+```
+
+Then give the relevant Python command. Do this even if the virtual environment may already be active; it is harmless and prevents the system `python` interpreter from being used accidentally.
+
+Use `python` only after activating `.venv`. Do not give bare project commands such as `python sync_playlist.py ...` without first showing the activation and update steps in the same command block.
+
+If `.venv` does not exist, the one-time setup is:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+git pull
+```
+
 ## Prototype/example: Sludge Grinder
 
 The first playlist built while developing this project is:
@@ -74,12 +96,16 @@ Only use this file when the user's request is actually about `Sludge Grinder` or
 A normal sync for this specific playlist is:
 
 ```bash
+source .venv/bin/activate
+git pull
 python sync_playlist.py --name "Sludge Grinder"
 ```
 
 A safe preview is:
 
 ```bash
+source .venv/bin/activate
+git pull
 python sync_playlist.py --name "Sludge Grinder" --dry-run
 ```
 
@@ -120,13 +146,14 @@ The OAuth token cache lives outside the repository at:
 Keep instructions short. After modifying an existing playlist, the preferred user-facing directions are generally:
 
 ```bash
+source .venv/bin/activate
 git pull
 python sync_playlist.py playlists/the-correct-file.txt --name "The Correct Playlist Name"
 ```
 
 Do not omit the playlist file argument when the requested playlist is not the script's built-in/default file.
 
-For a newly created playlist definition, give the corresponding `spotify_playlist.py` command instead.
+For a newly created playlist definition, give the corresponding `spotify_playlist.py` command instead, again with `.venv` activation and `git pull` first.
 
 If a one-click/local wrapper exists later, prefer that instead of terminal commands.
 
@@ -159,18 +186,24 @@ For a new playlist:
 5. Give the user a dry-run command first, for example:
 
 ```bash
+source .venv/bin/activate
+git pull
 python spotify_playlist.py playlists/new-list.txt --name "New Playlist" --dry-run
 ```
 
 Then, if the matches look right:
 
 ```bash
+source .venv/bin/activate
+git pull
 python spotify_playlist.py playlists/new-list.txt --name "New Playlist"
 ```
 
 After creation, future iterations should modify that same source file and use `sync_playlist.py` with both the correct file and playlist name, for example:
 
 ```bash
+source .venv/bin/activate
+git pull
 python sync_playlist.py playlists/new-list.txt --name "New Playlist"
 ```
 
