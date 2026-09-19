@@ -24,7 +24,6 @@ DEFAULT_DESCRIPTION = (
     "Sun-baked speakers, blown cones, hot asphalt, and riffs thick enough to leave fingerprints."
 )
 
-# Strong signals are intentionally narrow so this does not turn into a generic hard-rock playlist.
 GENRE_WEIGHTS = {
     "stoner rock": 5,
     "stoner metal": 5,
@@ -94,20 +93,50 @@ def get_liked_tracks(token: str) -> list[dict]:
     return tracks
 
 
-def get_artist_genres(token: str, artist_ids: list[str]) -> dict[str, list[str]]:
+def normalize(value: str) -> str:
+    return " ".join(value.casefold().split())
+
+
+def get_artist_genres(token: str, tracks: list[dict]) -> dict[str, list[str]]:
+    """Resolve artist genres through search instead of the restricted bulk /artists endpoint."""
+    artist_refs: dict[str, str] = {}
+    for track in tracks:
+        for artist in track.get("artists", []):
+            artist_id = artist.get("id")
+            name = artist.get("name")
+            if artist_id and name:
+                artist_refs.setdefault(artist_id, name)
+
     result: dict[str, list[str]] = {}
-    unique_ids = list(dict.fromkeys(artist_ids))
-    for start in range(0, len(unique_ids), 50):
-        batch = unique_ids[start : start + 50]
+    total = len(artist_refs)
+    for index, (artist_id, artist_name) in enumerate(artist_refs.items(), 1):
+        if index == 1 or index % 25 == 0 or index == total:
+            print(f"Resolving artist genres: {index}/{total}")
+
         response = spotify.api_request(
             "GET",
-            "/artists",
+            "/search",
             token,
-            params={"ids": ",".join(batch)},
+            params={
+                "q": f'artist:"{artist_name}"',
+                "type": "artist",
+                "limit": 10,
+            },
         )
-        for artist in response.json().get("artists", []):
-            if artist and artist.get("id"):
-                result[artist["id"]] = [g.casefold() for g in artist.get("genres", [])]
+        candidates = response.json().get("artists", {}).get("items", [])
+
+        exact_id = next((item for item in candidates if item.get("id") == artist_id), None)
+        exact_name = next(
+            (
+                item
+                for item in candidates
+                if normalize(item.get("name", "")) == normalize(artist_name)
+            ),
+            None,
+        )
+        match = exact_id or exact_name
+        result[artist_id] = [g.casefold() for g in (match or {}).get("genres", [])]
+
     return result
 
 
@@ -179,17 +208,12 @@ def main() -> int:
 
     token = get_scoped_token()
     liked = get_liked_tracks(token)
-    artist_ids = [
-        artist["id"]
-        for track in liked
-        for artist in track.get("artists", [])
-        if artist.get("id")
-    ]
-    genres_by_artist = get_artist_genres(token, artist_ids)
+    print(f"Loaded {len(liked)} liked tracks.")
+    genres_by_artist = get_artist_genres(token, liked)
 
     matched: list[dict] = []
     seen: set[str] = set()
-    print(f"Scanning {len(liked)} liked tracks...\n")
+    print(f"\nScanning {len(liked)} liked tracks...\n")
 
     for track in liked:
         best_score = 0
