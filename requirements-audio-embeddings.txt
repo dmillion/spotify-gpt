@@ -1,0 +1,5 @@
+# Optional dependencies for learned music embeddings.
+# Install only on the MacBook Pro used for audio analysis.
+torch>=2.2
+transformers==4.38.*
+huggingface-hub>=0.20
