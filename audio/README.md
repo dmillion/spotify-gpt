@@ -115,3 +115,52 @@ python audio/scan_library.py "/Volumes/WD Passport/Music" --sample-seconds 10
 ```
 
 The default is three excerpts of up to 20 seconds each per track.
+
+## Acoustic similarity search
+
+`find_similar.py` compares one indexed seed track against the successfully analyzed library using the stored DSP features. Features are robustly normalized across the local collection, weighted, and combined into an acoustic-distance score.
+
+This is intended as a first-pass candidate generator for playlist curation. The score is relative similarity within the indexed library, not a probability and not a semantic genre judgment.
+
+Search for a seed using artist/title text:
+
+```bash
+source .venv/bin/activate
+git pull
+
+python audio/find_similar.py --artist "Weedeater" --title "God Luck and Good Speed"
+```
+
+Or use a free-text seed search:
+
+```bash
+python audio/find_similar.py "Droids Attack Steven Seagal"
+```
+
+Return more candidates:
+
+```bash
+python audio/find_similar.py "Droids Attack Steven Seagal" --limit 50
+```
+
+Exclude other songs by the seed artist so the list is more useful for discovery:
+
+```bash
+python audio/find_similar.py "Droids Attack Steven Seagal" --limit 50 --exclude-same-artist
+```
+
+If a search matches multiple tracks, the script prints their SQLite row IDs. Re-run with the desired ID:
+
+```bash
+python audio/find_similar.py --seed-id 1234 --limit 50 --exclude-same-artist
+```
+
+An exact indexed file can also be used:
+
+```bash
+python audio/find_similar.py --path "/Volumes/WD Passport/Music/Artist/Album/song.mp3" --limit 50
+```
+
+The output shows a relative similarity score and the three measured characteristics that are closest to the seed (for example tempo, bass weight, fuzz/noise texture, brightness, or rhythmic density).
+
+The next planned layer is learned audio embeddings, which should capture higher-level timbre and musical similarity that these hand-designed DSP measurements cannot fully represent.
