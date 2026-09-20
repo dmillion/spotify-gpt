@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import math
 import sqlite3
 import sys
 from pathlib import Path
@@ -13,8 +12,8 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import numpy as np
 
 DEFAULT_DB = Path("data/audio_library.sqlite")
+DEFAULT_MODEL = "m-a-p/MERT-v1-95M"
 
-# Weight the features that most directly describe heaviness/groove/timbre a little more.
 FEATURES: Sequence[Tuple[str, float]] = (
     ("tempo_bpm", 1.15),
     ("rms_dbfs", 0.80),
@@ -31,35 +30,23 @@ FEATURES: Sequence[Tuple[str, float]] = (
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Rank tracks in the local MP3 index by acoustic similarity."
-    )
+    parser = argparse.ArgumentParser(description="Rank indexed tracks by acoustic similarity.")
+    parser.add_argument("query", nargs="?", help='Seed search text, e.g. "Weedeater Jason the Dragon"')
+    parser.add_argument("--artist", help="Seed artist")
+    parser.add_argument("--title", help="Seed title")
+    parser.add_argument("--path", type=Path, help="Exact indexed MP3 path")
+    parser.add_argument("--seed-id", type=int, help="Use a specific SQLite rowid")
+    parser.add_argument("--db", type=Path, default=DEFAULT_DB)
+    parser.add_argument("--limit", type=int, default=25)
+    parser.add_argument("--candidates", type=int, default=8)
+    parser.add_argument("--exclude-same-artist", action="store_true")
     parser.add_argument(
-        "query",
-        nargs="?",
-        help='Seed search text, e.g. "Weedeater God Luck and Good Speed"',
+        "--mode",
+        choices=("auto", "embedding", "dsp"),
+        default="auto",
+        help="Similarity engine (default: auto; prefers embeddings when available)",
     )
-    parser.add_argument("--artist", help="Seed artist (combine with --title for an exact search)")
-    parser.add_argument("--title", help="Seed track title")
-    parser.add_argument("--path", type=Path, help="Use an exact indexed MP3 path as the seed")
-    parser.add_argument("--db", type=Path, default=DEFAULT_DB, help="SQLite database path")
-    parser.add_argument("--limit", type=int, default=25, help="Number of matches to show (default: 25)")
-    parser.add_argument(
-        "--exclude-same-artist",
-        action="store_true",
-        help="Do not return other tracks by the seed artist",
-    )
-    parser.add_argument(
-        "--candidates",
-        type=int,
-        default=8,
-        help="If the seed search is ambiguous, show this many choices (default: 8)",
-    )
-    parser.add_argument(
-        "--seed-id",
-        type=int,
-        help="Use a specific rowid from a previous ambiguous-search result",
-    )
+    parser.add_argument("--model", default=DEFAULT_MODEL, help="Embedding model ID")
     return parser.parse_args()
 
 
@@ -96,41 +83,48 @@ def find_seed(conn: sqlite3.Connection, args: argparse.Namespace) -> sqlite3.Row
 
     conditions = ["error IS NULL"]
     params: List[object] = []
-
     if args.artist:
         conditions.append("LOWER(COALESCE(artist, '')) LIKE ?")
         params.append(f"%{normalize_text(args.artist)}%")
     if args.title:
         conditions.append("LOWER(COALESCE(title, '')) LIKE ?")
         params.append(f"%{normalize_text(args.title)}%")
-
     if args.query:
-        terms = [term for term in normalize_text(args.query).split() if term]
-        for term in terms:
+        for term in [t for t in normalize_text(args.query).split() if t]:
+            like = f"%{term}%"
             conditions.append(
                 "(LOWER(COALESCE(artist, '')) LIKE ? OR LOWER(COALESCE(title, '')) LIKE ? OR LOWER(COALESCE(album, '')) LIKE ?)"
             )
-            like = f"%{term}%"
             params.extend([like, like, like])
 
     if len(conditions) == 1:
         raise ValueError("Provide a query, --artist/--title, --path, or --seed-id.")
 
     rows = conn.execute(
-        "SELECT rowid AS id, * FROM tracks WHERE " + " AND ".join(conditions) + " ORDER BY artist, album, track_number, title LIMIT 50",
+        "SELECT rowid AS id, * FROM tracks WHERE " + " AND ".join(conditions) +
+        " ORDER BY artist, album, track_number, title LIMIT 50",
         params,
     ).fetchall()
-
     if not rows:
+        # Helpful fallback: show nearby artist/title rows when one side matched.
+        hints: List[sqlite3.Row] = []
+        if args.artist:
+            hints = conn.execute(
+                "SELECT rowid AS id, * FROM tracks WHERE error IS NULL AND LOWER(COALESCE(artist,'')) LIKE ? ORDER BY album, track_number LIMIT ?",
+                (f"%{normalize_text(args.artist)}%", max(1, args.candidates)),
+            ).fetchall()
+        if hints:
+            print("No exact seed match. Nearby indexed tracks:")
+            for row in hints:
+                print(f"  {row['id']:>6}  {row_label(row)}")
+            raise SystemExit(2)
         raise ValueError("No successfully analyzed indexed track matched the seed search.")
+
     if len(rows) == 1:
         return rows[0]
-
-    # Prefer a single exact artist/title match when both were supplied.
     if args.artist and args.title:
         exact = [
-            row
-            for row in rows
+            row for row in rows
             if normalize_text(row["artist"]) == normalize_text(args.artist)
             and normalize_text(row["title"]) == normalize_text(args.title)
         ]
@@ -141,70 +135,6 @@ def find_seed(conn: sqlite3.Connection, args: argparse.Namespace) -> sqlite3.Row
     for row in rows[: max(1, args.candidates)]:
         print(f"  {row['id']:>6}  {row_label(row)}")
     raise SystemExit(2)
-
-
-def load_feature_rows(conn: sqlite3.Connection) -> List[sqlite3.Row]:
-    columns = ", ".join(name for name, _ in FEATURES)
-    return conn.execute(
-        f"SELECT rowid AS id, path, artist, title, album, {columns} FROM tracks WHERE error IS NULL"
-    ).fetchall()
-
-
-def robust_center_scale(matrix: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    medians = np.nanmedian(matrix, axis=0)
-    q1 = np.nanpercentile(matrix, 25.0, axis=0)
-    q3 = np.nanpercentile(matrix, 75.0, axis=0)
-    scales = q3 - q1
-
-    # Fall back to standard deviation for columns with a nearly zero IQR.
-    std = np.nanstd(matrix, axis=0)
-    scales = np.where(scales > 1e-12, scales, std)
-    scales = np.where(scales > 1e-12, scales, 1.0)
-    return medians, scales
-
-
-def feature_vector(row: sqlite3.Row) -> np.ndarray:
-    return np.asarray(
-        [float(row[name]) if row[name] is not None else np.nan for name, _ in FEATURES],
-        dtype=np.float64,
-    )
-
-
-def similarity_rows(rows: List[sqlite3.Row], seed: sqlite3.Row, exclude_same_artist: bool) -> List[Tuple[float, sqlite3.Row, List[Tuple[str, float]]]]:
-    matrix = np.vstack([feature_vector(row) for row in rows])
-    medians, scales = robust_center_scale(matrix)
-    weights = np.sqrt(np.asarray([weight for _, weight in FEATURES], dtype=np.float64))
-
-    # Missing values are imputed to the library median, which makes that feature neutral.
-    filled = np.where(np.isnan(matrix), medians[None, :], matrix)
-    z = (filled - medians[None, :]) / scales[None, :]
-
-    seed_vec = feature_vector(seed)
-    seed_filled = np.where(np.isnan(seed_vec), medians, seed_vec)
-    seed_z = (seed_filled - medians) / scales
-
-    results: List[Tuple[float, sqlite3.Row, List[Tuple[str, float]]]] = []
-    seed_artist = normalize_text(seed["artist"])
-
-    for index, row in enumerate(rows):
-        if row["id"] == seed["id"]:
-            continue
-        if exclude_same_artist and seed_artist and normalize_text(row["artist"]) == seed_artist:
-            continue
-
-        diff = (z[index] - seed_z) * weights
-        distance = float(np.sqrt(np.mean(np.square(diff))))
-        # Map distance to a simple 0..100 score. This is relative similarity, not a probability.
-        score = 100.0 / (1.0 + distance)
-
-        contributions = []
-        for feature_index, (name, _) in enumerate(FEATURES):
-            contributions.append((name, abs(float(diff[feature_index]))))
-        contributions.sort(key=lambda item: item[1])
-        results.append((score, row, contributions[:3]))
-
-    results.sort(key=lambda item: item[0], reverse=True)
-    return results
 
 
 def format_reason(contributions: Sequence[Tuple[str, float]]) -> str:
@@ -224,32 +154,165 @@ def format_reason(contributions: Sequence[Tuple[str, float]]) -> str:
     return ", ".join(labels.get(name, name) for name, _ in contributions)
 
 
+def dsp_context(conn: sqlite3.Connection, seed: sqlite3.Row) -> Dict[str, List[Tuple[str, float]]]:
+    columns = ", ".join(name for name, _ in FEATURES)
+    rows = conn.execute(
+        f"SELECT path, {columns} FROM tracks WHERE error IS NULL"
+    ).fetchall()
+    matrix = np.vstack([
+        np.asarray([float(row[name]) if row[name] is not None else np.nan for name, _ in FEATURES])
+        for row in rows
+    ])
+    medians = np.nanmedian(matrix, axis=0)
+    q1 = np.nanpercentile(matrix, 25, axis=0)
+    q3 = np.nanpercentile(matrix, 75, axis=0)
+    scales = q3 - q1
+    std = np.nanstd(matrix, axis=0)
+    scales = np.where(scales > 1e-12, scales, std)
+    scales = np.where(scales > 1e-12, scales, 1.0)
+    weights = np.sqrt(np.asarray([weight for _, weight in FEATURES]))
+
+    seed_vec = np.asarray([float(seed[name]) if seed[name] is not None else np.nan for name, _ in FEATURES])
+    seed_z = (np.where(np.isnan(seed_vec), medians, seed_vec) - medians) / scales
+    output: Dict[str, List[Tuple[str, float]]] = {}
+    for idx, row in enumerate(rows):
+        vec = np.where(np.isnan(matrix[idx]), medians, matrix[idx])
+        z = (vec - medians) / scales
+        diff = np.abs((z - seed_z) * weights)
+        pairs = [(FEATURES[i][0], float(diff[i])) for i in range(len(FEATURES))]
+        pairs.sort(key=lambda x: x[1])
+        output[row["path"]] = pairs[:3]
+    return output
+
+
+def load_dsp_results(conn: sqlite3.Connection, seed: sqlite3.Row, exclude_same_artist: bool) -> List[Tuple[float, sqlite3.Row]]:
+    columns = ", ".join(name for name, _ in FEATURES)
+    rows = conn.execute(
+        f"SELECT rowid AS id, path, artist, title, album, {columns} FROM tracks WHERE error IS NULL"
+    ).fetchall()
+    matrix = np.vstack([
+        np.asarray([float(row[name]) if row[name] is not None else np.nan for name, _ in FEATURES])
+        for row in rows
+    ])
+    medians = np.nanmedian(matrix, axis=0)
+    q1 = np.nanpercentile(matrix, 25, axis=0)
+    q3 = np.nanpercentile(matrix, 75, axis=0)
+    scales = q3 - q1
+    std = np.nanstd(matrix, axis=0)
+    scales = np.where(scales > 1e-12, scales, std)
+    scales = np.where(scales > 1e-12, scales, 1.0)
+    weights = np.sqrt(np.asarray([weight for _, weight in FEATURES]))
+    filled = np.where(np.isnan(matrix), medians[None, :], matrix)
+    z = (filled - medians[None, :]) / scales
+    seed_vec = np.asarray([float(seed[name]) if seed[name] is not None else np.nan for name, _ in FEATURES])
+    seed_z = (np.where(np.isnan(seed_vec), medians, seed_vec) - medians) / scales
+    seed_artist = normalize_text(seed["artist"])
+
+    results: List[Tuple[float, sqlite3.Row]] = []
+    for i, row in enumerate(rows):
+        if row["id"] == seed["id"]:
+            continue
+        if exclude_same_artist and seed_artist and normalize_text(row["artist"]) == seed_artist:
+            continue
+        distance = float(np.sqrt(np.mean(np.square((z[i] - seed_z) * weights))))
+        results.append((100.0 / (1.0 + distance), row))
+    results.sort(key=lambda x: x[0], reverse=True)
+    return results
+
+
+def embedding_available(conn: sqlite3.Connection, seed_path: str, model: str) -> bool:
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM track_embeddings WHERE model = ? AND vector IS NOT NULL AND error IS NULL",
+            (model,),
+        ).fetchone()
+        seed = conn.execute(
+            "SELECT 1 FROM track_embeddings WHERE path = ? AND model = ? AND vector IS NOT NULL AND error IS NULL",
+            (seed_path, model),
+        ).fetchone()
+        return bool(row and row[0] > 1 and seed)
+    except sqlite3.OperationalError:
+        return False
+
+
+def load_embedding_results(conn: sqlite3.Connection, seed: sqlite3.Row, model: str, exclude_same_artist: bool) -> List[Tuple[float, sqlite3.Row]]:
+    seed_row = conn.execute(
+        "SELECT vector, dimensions FROM track_embeddings WHERE path = ? AND model = ? AND vector IS NOT NULL AND error IS NULL",
+        (seed["path"], model),
+    ).fetchone()
+    if not seed_row:
+        raise ValueError("Seed track does not have an embedding yet.")
+    seed_vec = np.frombuffer(seed_row[0], dtype="<f4")
+    seed_norm = float(np.linalg.norm(seed_vec)) or 1.0
+
+    rows = conn.execute(
+        """
+        SELECT t.rowid AS id, t.path, t.artist, t.title, t.album, e.vector, e.dimensions
+        FROM track_embeddings e
+        JOIN tracks t ON t.path = e.path
+        WHERE e.model = ? AND e.vector IS NOT NULL AND e.error IS NULL AND t.error IS NULL
+        """,
+        (model,),
+    ).fetchall()
+    seed_artist = normalize_text(seed["artist"])
+    results: List[Tuple[float, sqlite3.Row]] = []
+    for row in rows:
+        if row["id"] == seed["id"]:
+            continue
+        if exclude_same_artist and seed_artist and normalize_text(row["artist"]) == seed_artist:
+            continue
+        vec = np.frombuffer(row["vector"], dtype="<f4")
+        if vec.size != seed_vec.size:
+            continue
+        denom = seed_norm * (float(np.linalg.norm(vec)) or 1.0)
+        cosine = float(np.dot(seed_vec, vec) / denom)
+        results.append((max(0.0, min(100.0, cosine * 100.0)), row))
+    results.sort(key=lambda x: x[0], reverse=True)
+    return results
+
+
+def dedupe(results: Sequence[Tuple[float, sqlite3.Row]], seed: sqlite3.Row) -> List[Tuple[float, sqlite3.Row]]:
+    seen = {(normalize_text(seed["artist"]), normalize_text(seed["title"]))}
+    output: List[Tuple[float, sqlite3.Row]] = []
+    for score, row in results:
+        key = (normalize_text(row["artist"]), normalize_text(row["title"]))
+        if key in seen:
+            continue
+        seen.add(key)
+        output.append((score, row))
+    return output
+
+
 def main() -> int:
     args = parse_args()
-    db_path = args.db.expanduser()
-    if not db_path.exists():
-        print(f"ERROR: database does not exist: {db_path}", file=sys.stderr)
+    if not args.db.expanduser().exists():
+        print(f"ERROR: database does not exist: {args.db}", file=sys.stderr)
         return 2
-
-    conn = sqlite3.connect(str(db_path))
+    conn = sqlite3.connect(str(args.db.expanduser()))
     conn.row_factory = sqlite3.Row
     try:
         seed = find_seed(conn, args)
-        rows = load_feature_rows(conn)
-        if not rows:
-            print("ERROR: no successfully analyzed tracks found in database", file=sys.stderr)
-            return 2
+        mode = args.mode
+        if mode == "auto":
+            mode = "embedding" if embedding_available(conn, seed["path"], args.model) else "dsp"
+        if mode == "embedding" and not embedding_available(conn, seed["path"], args.model):
+            raise ValueError("Embedding mode requested, but this seed/model is not embedded yet. Run audio/build_embeddings.py first.")
 
-        results = similarity_rows(rows, seed, args.exclude_same_artist)
+        if mode == "embedding":
+            results = load_embedding_results(conn, seed, args.model, args.exclude_same_artist)
+        else:
+            results = load_dsp_results(conn, seed, args.exclude_same_artist)
+        results = dedupe(results, seed)
+        context = dsp_context(conn, seed)
+
         print(f"Seed: {row_label(seed)}")
-        print(f"Indexed comparison pool: {len(rows):,} successfully analyzed tracks")
-        print("Similarity score is relative acoustic distance, not a probability.\n")
-
-        for rank, (score, row, reasons) in enumerate(results[: max(1, args.limit)], 1):
-            print(
-                f"{rank:>2}. {score:5.1f}  {row_label(row)}\n"
-                f"    closest on: {format_reason(reasons)}"
-            )
+        print(f"Similarity engine: {mode}" + (f" ({args.model})" if mode == "embedding" else ""))
+        print("Scores are relative similarity values, not probabilities.\n")
+        for rank, (score, row) in enumerate(results[: max(1, args.limit)], 1):
+            reason = format_reason(context.get(row["path"], []))
+            print(f"{rank:>2}. {score:5.1f}  {row_label(row)}")
+            if reason:
+                print(f"    DSP context: {reason}")
         return 0
     except ValueError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
