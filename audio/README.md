@@ -4,7 +4,7 @@
 
 Use the newer MacBook Pro for audio indexing and other heavy local compute. The older iMac is intended for prompting and lightweight commands only.
 
-It reads ID3/MP3 metadata and, by default, uses `ffmpeg` to decode three short excerpts from each track (near the beginning, middle, and end). NumPy is then used to calculate lightweight audio features that can later support similarity search and playlist curation.
+It reads ID3/MP3 metadata and, by default, uses `ffmpeg` to decode three short excerpts from each track (near the beginning, middle, and end). NumPy is then used to calculate lightweight audio features that support similarity search and playlist curation.
 
 The default database is:
 
@@ -25,8 +25,7 @@ The database is ignored by Git and should remain local.
 - low / low-mid / mid / high energy ratios
 - onset-density estimate
 - approximate BPM
-
-These are descriptive DSP features, not yet neural audio embeddings. Embeddings can be added later after validating that the lightweight index is useful.
+- optional learned MERT music embeddings
 
 ## Requirements
 
@@ -52,33 +51,14 @@ brew install ffmpeg
 
 ## Current WD Passport music roots
 
-The current MP3 library is spread across these two roots:
-
 ```text
 /Volumes/WD Passport/Old MacBook Stuff/iTunes Music
 /Volumes/WD Passport/Music
 ```
 
-The scanner is recursive, so nested artist/album folders under each root are included automatically.
+The scanner is recursive, so nested artist/album folders under each root are included automatically. Both roots write into the same SQLite database.
 
-Both roots can be scanned independently into the same SQLite database. The second run adds or updates tracks; it does not replace the first run's data.
-
-## Recommended first test
-
-Run only 25 MP3s from each root first:
-
-```bash
-source .venv/bin/activate
-git pull
-pip install -r requirements.txt
-
-python audio/scan_library.py "/Volumes/WD Passport/Old MacBook Stuff/iTunes Music" --limit 25
-python audio/scan_library.py "/Volumes/WD Passport/Music" --limit 25
-```
-
-## Full recursive scan
-
-If the test results look sensible:
+## Full recursive DSP scan
 
 ```bash
 source .venv/bin/activate
@@ -88,79 +68,66 @@ python audio/scan_library.py "/Volumes/WD Passport/Old MacBook Stuff/iTunes Musi
 python audio/scan_library.py "/Volumes/WD Passport/Music"
 ```
 
-Both commands write to:
+The scanner is resumable and skips unchanged successfully analyzed files.
 
-```text
-data/audio_library.sqlite
-```
+## Learned music embeddings
 
-The scanner is resumable. On later runs it skips files whose path, size, modification time, and feature-analysis version are unchanged.
+The DSP similarity layer is useful for measurable properties such as tempo, frequency balance, loudness and transient density, but unrelated genres can share those statistics. `build_embeddings.py` adds a higher-level music representation using `m-a-p/MERT-v1-95M`.
 
-To force a fresh analysis of a root:
+Install the optional embedding dependencies on the MacBook Pro only:
 
 ```bash
-python audio/scan_library.py "/Volumes/WD Passport/Music" --force
+source .venv/bin/activate
+git pull
+pip install -r requirements-audio-embeddings.txt
 ```
 
-To inventory tags and technical MP3 metadata without decoding audio:
+The first embedding run downloads the MERT model from Hugging Face. The model expects 24 kHz audio. Each track is represented from up to three five-second excerpts spread across the recording. Embeddings are stored in the same local SQLite database and are resumable.
+
+Start with a 25-track test:
 
 ```bash
-python audio/scan_library.py "/Volumes/WD Passport/Music" --metadata-only
+python audio/build_embeddings.py --limit 25
 ```
 
-For a faster full-library first pass, shorter excerpts can be used:
+Then build the full library:
 
 ```bash
-python audio/scan_library.py "/Volumes/WD Passport/Music" --sample-seconds 10
+python audio/build_embeddings.py
 ```
 
-The default is three excerpts of up to 20 seconds each per track.
+The script prefers Apple Metal/MPS acceleration when available. If a model operation fails specifically on MPS, retry with CPU:
 
-## Acoustic similarity search
+```bash
+python audio/build_embeddings.py --device cpu
+```
 
-`find_similar.py` compares one indexed seed track against the successfully analyzed library using the stored DSP features. Features are robustly normalized across the local collection, weighted, and combined into an acoustic-distance score.
+Successful existing embeddings are skipped on subsequent runs.
 
-This is intended as a first-pass candidate generator for playlist curation. The score is relative similarity within the indexed library, not a probability and not a semantic genre judgment.
+## Similarity search
 
-Search for a seed using artist/title text:
+`find_similar.py` automatically uses MERT embeddings when the seed track has one. Before embeddings exist, it falls back to the original DSP similarity engine.
+
+Use an indexed seed row:
 
 ```bash
 source .venv/bin/activate
 git pull
 
-python audio/find_similar.py --artist "Weedeater" --title "God Luck and Good Speed"
+python audio/find_similar.py --seed-id 3781 --limit 30 --exclude-same-artist
 ```
 
-Or use a free-text seed search:
+Or search by metadata:
 
 ```bash
-python audio/find_similar.py "Droids Attack Steven Seagal"
+python audio/find_similar.py --artist "Weedeater" --title "Jason... The Dragon" --limit 30 --exclude-same-artist
 ```
 
-Return more candidates:
+Force a particular engine for comparison:
 
 ```bash
-python audio/find_similar.py "Droids Attack Steven Seagal" --limit 50
+python audio/find_similar.py --seed-id 3781 --mode embedding --limit 30 --exclude-same-artist
+python audio/find_similar.py --seed-id 3781 --mode dsp --limit 30 --exclude-same-artist
 ```
 
-Exclude other songs by the seed artist so the list is more useful for discovery:
-
-```bash
-python audio/find_similar.py "Droids Attack Steven Seagal" --limit 50 --exclude-same-artist
-```
-
-If a search matches multiple tracks, the script prints their SQLite row IDs. Re-run with the desired ID:
-
-```bash
-python audio/find_similar.py --seed-id 1234 --limit 50 --exclude-same-artist
-```
-
-An exact indexed file can also be used:
-
-```bash
-python audio/find_similar.py --path "/Volumes/WD Passport/Music/Artist/Album/song.mp3" --limit 50
-```
-
-The output shows a relative similarity score and the three measured characteristics that are closest to the seed (for example tempo, bass weight, fuzz/noise texture, brightness, or rhythmic density).
-
-The next planned layer is learned audio embeddings, which should capture higher-level timbre and musical similarity that these hand-designed DSP measurements cannot fully represent.
+Duplicate copies with the same normalized artist/title are collapsed in the results. In embedding mode the ranking is driven by learned music similarity, while the printed `DSP context` remains useful for explaining which conventional acoustic measurements also resemble the seed.
