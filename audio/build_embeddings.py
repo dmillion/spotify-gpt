@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import math
+import platform
 import shutil
 import sqlite3
 import subprocess
@@ -78,6 +79,15 @@ def choose_device(torch_module, requested: str) -> str:
             raise RuntimeError("MPS was requested but is not available")
         return "mps"
     return "mps" if torch_module.backends.mps.is_available() else "cpu"
+
+
+def resolve_ffmpeg() -> Optional[str]:
+    """Prefer native Apple Silicon Homebrew ffmpeg over migrated Intel /usr/local tools."""
+    if sys.platform == "darwin" and platform.machine() == "arm64":
+        native = Path("/opt/homebrew/bin/ffmpeg")
+        if native.is_file():
+            return str(native)
+    return shutil.which("ffmpeg")
 
 
 def excerpt_starts(duration: float, excerpt_seconds: float) -> List[float]:
@@ -185,10 +195,12 @@ def main() -> int:
         print(f"ERROR: database does not exist: {db_path}", file=sys.stderr)
         return 2
 
-    ffmpeg = shutil.which("ffmpeg")
+    ffmpeg = resolve_ffmpeg()
     if ffmpeg is None:
-        print("ERROR: ffmpeg is required but was not found in PATH", file=sys.stderr)
+        print("ERROR: ffmpeg is required but was not found", file=sys.stderr)
         return 2
+
+    print(f"Using ffmpeg: {ffmpeg}")
 
     # Fail early if ffmpeg itself is broken.
     probe = subprocess.run([ffmpeg, "-version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
@@ -254,7 +266,6 @@ def main() -> int:
                     device=device,
                 )
             except Exception as exc:
-                # MPS occasionally exposes unsupported operations in third-party models.
                 error = str(exc)[:1000]
 
             now = dt.datetime.now(dt.timezone.utc).isoformat()
