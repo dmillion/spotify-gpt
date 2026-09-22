@@ -118,6 +118,28 @@ python spotify_playlist.py
 
 By default the prototype script creates a private playlist using its configured/default name. The Spotify playlist used during development was later renamed to `Sludge Grinder`.
 
+## Run the local playlist studio
+
+The local app turns a natural-language prompt into a Spotify playlist, keeps a history in `data/playlist_history.db`, and can regenerate any saved playlist with a fresh set of tracks.
+
+Add these values to `.env`:
+
+```text
+OPENAI_API_KEY=your_openai_api_key
+OPENAI_MODEL=gpt-4o-mini
+```
+
+Then start the app:
+
+```bash
+source .venv/bin/activate
+git pull
+pip install -r requirements.txt
+python app.py
+```
+
+Open http://127.0.0.1:5000. The first generated playlist opens the existing Spotify PKCE authorization flow if a cached Spotify token is not available. Spotify playlists created by the app are private.
+
 ## Sync an existing Spotify playlist
 
 `sync_playlist.py` adds tracks from the track-list file that are not already in an existing Spotify playlist. It does not intentionally duplicate tracks already present.
@@ -190,3 +212,42 @@ A future Apple Music adapter should:
 6. Keep Apple-specific credentials/tokens out of Git.
 
 Because Apple Music authentication requires developer credentials and user authorization that are different from Spotify's PKCE flow, Apple Music setup will need its own instructions and configuration once that adapter exists.
+
+### Curating from the MP3 index
+
+The studio defaults to **My MP3 library**. It reads `data/audio_library.sqlite`
+(or `AUDIO_LIBRARY_DB`) without needing the original drive mounted. **Broader
+discovery** keeps the original unrestricted model curation mode.
+
+Library mode first translates the prompt into artist, metadata, and acoustic
+preferences, retrieves up to 240 unique candidate tracks, then asks the model to
+curate from those candidates. Selected IDs are checked locally and resolved to
+canonical indexed artist/title tags before Spotify matching. Tracks unavailable
+on Spotify are reported. This creates a Spotify playlist, not local MP3 playback.
+Regeneration preserves the source mode and excludes previously requested tracks;
+existing history entries retain discovery mode.
+
+The model receives catalog artist/genre names and candidate metadata/sound scores,
+not audio files or filesystem paths. Library mode uses two model requests.
+
+Sound scores are 0–100 percentile ranks within the deduplicated, usable library:
+
+- bass weight: low-band energy ratio
+- low-mid weight: low-mid energy ratio
+- brightness: spectral centroid
+- noise texture: spectral flatness (not a reliable fuzz/distortion label)
+- loudness: excerpt RMS level
+- rhythmic density: onset-density estimate
+- tempo: approximate BPM
+
+Missing measurements remain missing. These scores summarize existing excerpt
+measurements; they do not add new audio information, measure mood or vocal style,
+or describe changes within a track. Retrieval is a shortlist, so narrowly phrased
+requests can omit relevant songs. Constraints other than library membership and
+exclusions are interpreted by the model, not enforced as numeric filters.
+
+Try: “20 songs from my library with strong bass, low brightness, and slow-to-medium
+tempo. Avoid repeating artists.” Source tracks and their scores are saved with
+playlist history for inspection via `/api/history`.
+
+Run the isolated checks with `.venv/bin/python -m unittest discover -s tests -v`.

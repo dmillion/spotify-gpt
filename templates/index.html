@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mixtape Foundry</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+    :root { --ink:#20251f; --muted:#667069; --paper:#f3efe6; --acid:#c8e66a; --line:#d7d2c5; --red:#e3644b; }
+    * { box-sizing:border-box; } body { margin:0; color:var(--ink); background:var(--paper); font-family:'Space Grotesk',sans-serif; }
+    body:before { content:''; position:fixed; inset:0; pointer-events:none; opacity:.22; background-image:radial-gradient(#89907d 0.7px,transparent .7px); background-size:14px 14px; }
+    main { width:min(1180px,calc(100% - 40px)); margin:0 auto; padding:54px 0 80px; position:relative; }
+    header { display:flex; justify-content:space-between; align-items:flex-end; gap:24px; margin-bottom:48px; }
+    .eyebrow,.meta { font:500 11px 'DM Mono',monospace; letter-spacing:0; text-transform:uppercase; color:var(--muted); }
+    h1 { margin:8px 0 0; font-size:clamp(42px,7vw,84px); line-height:.9; letter-spacing:-2px; max-width:700px; }
+    .mark { width:80px; height:80px; background:var(--acid); border:2px solid var(--ink); display:grid; place-items:center; transform:rotate(7deg); font:500 12px 'DM Mono',monospace; text-align:center; }
+    .composer { display:grid; grid-template-columns:1fr 180px; border:2px solid var(--ink); background:#fffdf8; min-height:168px; box-shadow:9px 9px 0 var(--ink); }
+    textarea { width:100%; min-height:164px; padding:22px; border:0; resize:vertical; background:transparent; color:var(--ink); font:500 20px/1.35 'Space Grotesk',sans-serif; outline:none; }
+    textarea::placeholder { color:#9b9d94; } button { border:0; cursor:pointer; font:600 14px 'Space Grotesk',sans-serif; }
+    .generate { background:var(--red); color:#fffdf8; border-left:2px solid var(--ink); font-size:16px; padding:20px; } .generate:hover { background:#c84e37; }
+    .generate:disabled { cursor:wait; opacity:.6; } .status { min-height:24px; margin:22px 0 32px; color:var(--red); font:500 12px 'DM Mono',monospace; }
+    .section-head { display:flex; align-items:baseline; justify-content:space-between; border-bottom:2px solid var(--ink); padding-bottom:10px; margin-bottom:18px; }
+    h2 { margin:0; font-size:24px; } .history { display:grid; gap:14px; }
+    .playlist { display:grid; grid-template-columns:1fr auto; gap:18px; border-bottom:1px solid var(--line); padding:20px 0; }
+    .playlist h3 { margin:0 0 7px; font-size:25px; } .playlist p { margin:0; color:var(--muted); max-width:700px; line-height:1.45; }
+    .tracks { margin-top:14px; display:flex; flex-wrap:wrap; gap:6px; } .track { border:1px solid var(--line); padding:6px 9px; font:11px 'DM Mono',monospace; color:#4e5851; }
+    .actions { display:flex; flex-direction:column; align-items:flex-end; gap:10px; } .date { white-space:nowrap; } .regen { background:var(--acid); color:var(--ink); padding:11px 14px; border:1px solid var(--ink); } .regen:hover { background:#b5d453; }
+    a { color:var(--ink); font:500 11px 'DM Mono',monospace; text-transform:uppercase; } .empty { color:var(--muted); padding:25px 0; }
+    @media (max-width:700px) { main { width:min(100% - 28px,1180px); padding-top:30px; } header { margin-bottom:30px; } .mark { width:58px; height:58px; font-size:9px; } .composer { grid-template-columns:1fr; } .generate { min-height:62px; border-left:0; border-top:2px solid var(--ink); } .playlist { grid-template-columns:1fr; } .actions { flex-direction:row; align-items:center; } }
+  </style>
+</head>
+<body>
+<main>
+  <header><div><div class="eyebrow">Local playlist studio / 001</div><h1>Make a mixtape<br>from a thought.</h1></div><div class="mark">PROMPT<br>→<br>PLAY</div></header>
+  <p><label for="source">Choose tracks from </label><select id="source"><option value="library">My MP3 library</option><option value="discovery">Broader discovery</option></select></p>
+  <p id="library-info" class="meta" aria-live="polite">Checking MP3 index…</p>
+  <section class="composer"><textarea id="prompt" autofocus placeholder="A rainy-night drive through southern sludge, but with huge choruses and no obvious picks..."></textarea><button class="generate" id="generate">Generate<br>playlist</button></section>
+  <div class="status" id="status" role="status"></div>
+  <section><div class="section-head"><h2>Recent builds</h2><span class="meta" id="count"></span></div><div class="history" id="history"><div class="empty">No playlists yet. Give the machine a mood.</div></div></section>
+</main>
+<script>
+  const promptBox = document.querySelector('#prompt');
+  const button = document.querySelector('#generate');
+  const status = document.querySelector('#status');
+  const history = document.querySelector('#history');
+  const count = document.querySelector('#count');
+  const escapeHtml = value => String(value).replace(/[&<>'"]/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[character]));
+  const dateLabel = value => new Date(value).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'});
+  function render(items) {
+    count.textContent = `${items.length} saved`;
+    if (!items.length) { history.innerHTML = '<div class="empty">No playlists yet. Give the machine a mood.</div>'; return; }
+    history.innerHTML = items.map(item => `<article class="playlist"><div><div class="eyebrow">${escapeHtml(item.source === 'library' ? 'MP3 library / ' : 'Discovery / ')}${escapeHtml(item.prompt)}</div><h3>${escapeHtml(item.name)}</h3><p>${escapeHtml(item.description)}</p><div class="tracks">${item.tracks.slice(0,12).map(track => `<span class="track">${escapeHtml(track.artist)} / ${escapeHtml(track.title)}</span>`).join('')}${item.tracks.length > 12 ? `<span class="track">+${item.tracks.length - 12} more</span>` : ''}</div></div><div class="actions"><span class="meta date">${dateLabel(item.created_at)}</span>${item.spotify_url ? `<a href="${escapeHtml(item.spotify_url)}" target="_blank" rel="noreferrer">Open in Spotify ↗</a>` : ''}<button class="regen" data-id="${item.id}">Regenerate ↻</button></div></article>`).join('');
+  }
+  async function loadHistory() { const response = await fetch('/api/history'); render(await response.json()); }
+  async function submit(url, body) {
+    button.disabled = true; status.textContent = 'CURATING / RESOLVING / PRESSING...';
+    try { const response = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Something went wrong.'); status.textContent = `Built “${data.name}” with ${data.tracks.length} resolved tracks.${data.missing?.length ? ` ${data.missing.length} unavailable on Spotify: ${data.missing.join('; ')}` : ''}`; promptBox.value = ''; await loadHistory(); }
+    catch (error) { status.textContent = error.message; } finally { button.disabled = false; }
+  }
+  button.addEventListener('click', () => submit('/api/generate', {prompt:promptBox.value, source:document.querySelector('#source').value}));
+  promptBox.addEventListener('keydown', event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') button.click(); });
+  history.addEventListener('click', event => { if (event.target.matches('.regen')) submit(`/api/history/${event.target.dataset.id}/regenerate`, {}); });
+  fetch('/api/library').then(response => response.json()).then(data => {
+    document.querySelector('#library-info').textContent = data.available
+      ? `${data.tracks.toLocaleString()} unique indexed tracks · Try “bass-heavy, darker sound, slower tempo.” Library mode sends candidate metadata and sound scores to the playlist model.`
+      : data.error;
+  }).catch(() => { document.querySelector('#library-info').textContent = 'Could not check the MP3 index.'; });
+  loadHistory();
+</script>
+</body>
+</html>
