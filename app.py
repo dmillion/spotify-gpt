@@ -3,15 +3,17 @@
 
 from __future__ import annotations
 
+import hmac
 import json
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import requests
 from dotenv import load_dotenv
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 
 import spotify_playlist as spotify
 from audio.library_context import Library
@@ -23,8 +25,21 @@ DATABASE = Path(os.environ.get("PLAYLIST_HISTORY_DB", ROOT / "data" / "playlist_
 AUDIO_DATABASE = Path(os.environ.get("AUDIO_LIBRARY_DB", ROOT / "data" / "audio_library.sqlite"))
 OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+APP_PASSWORD = os.environ.get("APP_PASSWORD", "").strip()
+APP_SESSION_SECRET = os.environ.get("APP_SESSION_SECRET", "").strip()
 
 app = Flask(__name__)
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=os.environ.get("APP_SESSION_COOKIE_SECURE", "0").strip().lower() in {"1", "true", "yes", "on"},
+    PERMANENT_SESSION_LIFETIME=timedelta(days=7),
+)
+
+if APP_PASSWORD:
+    if not APP_SESSION_SECRET:
+        raise RuntimeError("APP_SESSION_SECRET must be set when APP_PASSWORD is enabled.")
+    app.secret_key = APP_SESSION_SECRET
 
 
 class AppError(RuntimeError):
@@ -65,6 +80,55 @@ def require_configuration() -> None:
         missing.append("SPOTIFY_CLIENT_ID")
     if missing:
         raise AppError(f"Add {', '.join(missing)} to .env before generating a playlist.")
+
+
+def safe_next_url(value: str | None) -> str:
+    if not value:
+        return url_for("home")
+    parsed = urlsplit(value)
+    if parsed.scheme or parsed.netloc or not value.startswith("/") or value.startswith("//"):
+        return url_for("home")
+    return value
+
+
+@app.before_request
+def require_login():
+    if not APP_PASSWORD:
+        return None
+    if request.endpoint in {"login", "static"}:
+        return None
+    if session.get("authenticated") is True:
+        return None
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Authentication required."}), 401
+    return redirect(url_for("login", next=request.full_path if request.query_string else request.path))
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if not APP_PASSWORD:
+        return redirect(url_for("home"))
+    if session.get("authenticated") is True:
+        return redirect(safe_next_url(request.args.get("next")))
+
+    error = None
+    if request.method == "POST":
+        supplied = request.form.get("password", "")
+        if hmac.compare_digest(supplied, APP_PASSWORD):
+            session.clear()
+            session["authenticated"] = True
+            session.permanent = True
+            next_url = safe_next_url(request.form.get("next"))
+            return redirect(next_url)
+        error = "Incorrect password."
+
+    return render_template("login.html", error=error, next_url=safe_next_url(request.args.get("next")))
+
+
+@app.post("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 
 def model_json(instructions: str, prompt: str) -> dict:
@@ -224,7 +288,7 @@ def row_to_result(row: sqlite3.Row) -> dict:
 
 @app.get("/")
 def home():
-    return render_template("index.html")
+    return render_template("index.html", password_gate_enabled=bool(APP_PASSWORD))
 
 
 @app.get("/api/library")
