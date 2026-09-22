@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mixtape Foundry — Access</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+    :root { --ink:#20251f; --muted:#667069; --paper:#f3efe6; --acid:#c8e66a; --red:#e3644b; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; display:grid; place-items:center; color:var(--ink); background:var(--paper); font-family:'Space Grotesk',sans-serif; }
+    body:before { content:''; position:fixed; inset:0; pointer-events:none; opacity:.22; background-image:radial-gradient(#89907d 0.7px,transparent .7px); background-size:14px 14px; }
+    main { width:min(440px,calc(100% - 32px)); position:relative; }
+    .eyebrow { font:500 11px 'DM Mono',monospace; text-transform:uppercase; color:var(--muted); }
+    h1 { margin:9px 0 24px; font-size:46px; line-height:.95; letter-spacing:-1.5px; }
+    form { border:2px solid var(--ink); background:#fffdf8; box-shadow:8px 8px 0 var(--ink); padding:22px; }
+    label { display:block; margin-bottom:8px; font:500 11px 'DM Mono',monospace; text-transform:uppercase; color:var(--muted); }
+    input { width:100%; border:1px solid var(--ink); background:#fff; padding:13px 14px; font:500 16px 'Space Grotesk',sans-serif; outline:none; }
+    button { width:100%; margin-top:14px; border:1px solid var(--ink); background:var(--acid); color:var(--ink); padding:13px 14px; cursor:pointer; font:600 14px 'Space Grotesk',sans-serif; }
+    button:hover { background:#b5d453; }
+    .error { margin:0 0 14px; color:var(--red); font:500 12px 'DM Mono',monospace; }
+  </style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">Mixtape Foundry / private preview</div>
+  <h1>Enter the<br>listening room.</h1>
+  <form method="post" action="{{ url_for('login') }}">
+    {% if error %}<p class="error">{{ error }}</p>{% endif %}
+    <input type="hidden" name="next" value="{{ next_url }}">
+    <label for="password">Shared password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" autofocus required>
+    <button type="submit">Unlock</button>
+  </form>
+</main>
+</body>
+</html>
