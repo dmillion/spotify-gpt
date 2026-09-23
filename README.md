@@ -251,3 +251,34 @@ tempo. Avoid repeating artists.” Source tracks and their scores are saved with
 playlist history for inspection via `/api/history`.
 
 Run the isolated checks with `.venv/bin/python -m unittest discover -s tests -v`.
+
+### OpenAI token meter
+
+The dashboard shows input/output tokens, total recorded tokens, and today's tokens
+(UTC), using the usage counts returned by OpenAI. Each API response is recorded in
+`openai_usage` in the playlist history database, including both library-mode calls
+and responses whose content or subsequent Spotify operation fails. The meter
+refreshes every 10 seconds and after generation or regeneration.
+
+Tracking begins with this feature; older calls and usage from other apps are not
+included. Requests without a usage response (for example, a network timeout) cannot
+be counted. Responses missing token counts are flagged as unreported. Totals persist
+across restarts and the usage endpoint uses the dashboard's existing login protection.
+
+### Dashboard themes
+
+Use the **Theme** dropdown on the dashboard or sign-in screen:
+
+- **Foundry · Original** retains the original paper-and-ink appearance.
+- **Deep Space · Phosphor** (default) uses dark teal panels, green accents, and a
+  compact retro instrument display with a brief signal acquisition animation.
+- **Amber · Terminal** offers the same layout in warm amber tones.
+
+The choice is saved in this browser and shared between the sign-in screen and
+studio. Switching themes preserves your current prompt. Themes include visible
+keyboard focus, labeled controls, mobile layouts, and forced-color support; the signal animation settles within five seconds and is disabled when reduced motion
+is preferred. There are no flicker or scanline animations.
+
+The sci-fi themes use a primary composer with a compact usage sidebar and an open
+playlist archive. The Echo Receiver display title uses locally hosted Michroma;
+its SIL Open Font License is included in `static/fonts/Michroma-OFL.txt`.

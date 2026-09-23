@@ -20,9 +20,12 @@
     button:hover { background:#b5d453; }
     .error { margin:0 0 14px; color:var(--red); font:500 12px 'DM Mono',monospace; }
   </style>
+  <script src="{{ url_for('static', filename='themes.js') }}"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='themes.css') }}">
 </head>
 <body>
-<main>
+<main class="login-main">
+  {% include '_theme_picker.html' %}
   <div class="eyebrow">Mixtape Foundry / private preview</div>
   <h1>Enter the<br>listening room.</h1>
   <form method="post" action="{{ url_for('login') }}">

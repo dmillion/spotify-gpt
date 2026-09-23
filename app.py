@@ -43,7 +43,43 @@ if APP_PASSWORD:
 
 
 class AppError(RuntimeError):
-    pass
+    def __init__(self, message, status_code=502, help_url=None):
+        super().__init__(message)
+        self.status_code = status_code
+        self.help_url = help_url
+
+
+def check_openai_response(response):
+    try:
+        response.raise_for_status()
+    except requests.HTTPError:
+        if response.status_code != 429:
+            raise
+        try:
+            payload = response.json()
+            error = payload.get("error", {}) if isinstance(payload, dict) else {}
+            if not isinstance(error, dict):
+                error = {}
+        except ValueError:
+            error = {}
+        code = error.get("code")
+        billing_url = "https://platform.openai.com/settings/organization/billing/"
+        limits_url = "https://platform.openai.com/settings/organization/limits"
+        messages = {
+            "credit_balance_exhausted": "OpenAI API credits are exhausted. Add credits in OpenAI API billing, then try again.",
+            "organization_spend_limit_exceeded": "Your OpenAI organization has reached its spending limit. Review the organization limit before trying again.",
+            "project_spend_limit_exceeded": "Your OpenAI project has reached its spending limit. Review the project's limits in OpenAI settings before trying again.",
+            "organization_usage_limit_exceeded": "Your OpenAI organization has reached its usage limit. Request a higher limit or contact OpenAI support.",
+        }
+        if code in messages:
+            raise AppError(messages[code], 429, billing_url if code == "credit_balance_exhausted" else limits_url) from None
+        if code == "insufficient_quota" or error.get("type") == "insufficient_quota":
+            raise AppError("OpenAI API quota is unavailable. Check your API credit balance and usage limits before trying again.", 429, billing_url) from None
+        if code in {"rate_limit_exceeded", "slow_down"} or error.get("type") == "rate_limit_error":
+            delay = response.headers.get("Retry-After", "")
+            wait = f"Wait at least {delay} seconds" if delay.isdigit() else "Wait briefly"
+            raise AppError(f"OpenAI's temporary request or token rate limit was reached. {wait}, then try again. If this persists, check your API rate limits.", 429, limits_url) from None
+        raise AppError("OpenAI rejected this request with a 429 error. Check your API credits and limits; the response did not identify whether this is a quota or temporary rate limit.", 429, limits_url) from None
 
 
 def database() -> sqlite3.Connection:
@@ -68,6 +104,16 @@ def database() -> sqlite3.Connection:
         connection.execute("ALTER TABLE generated_playlists ADD COLUMN source TEXT NOT NULL DEFAULT 'discovery'")
     if "source_tracks" not in columns:
         connection.execute("ALTER TABLE generated_playlists ADD COLUMN source_tracks TEXT NOT NULL DEFAULT '[]'")
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS openai_usage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            model TEXT NOT NULL,
+            input_tokens INTEGER,
+            output_tokens INTEGER,
+            total_tokens INTEGER,
+            created_at TEXT NOT NULL
+        )
+    """)
     connection.commit()
     return connection
 
@@ -146,8 +192,19 @@ def model_json(instructions: str, prompt: str) -> dict:
         },
         timeout=90,
     )
-    response.raise_for_status()
-    content = response.json()["choices"][0]["message"]["content"]
+    check_openai_response(response)
+    payload = response.json()
+    # Save usage before parsing content or doing any Spotify work.
+    usage = payload.get("usage") or {}
+    counts = [usage.get(key) for key in ("prompt_tokens", "completion_tokens", "total_tokens")]
+    if not all(type(value) is int and value >= 0 for value in counts):
+        counts = [None, None, None]
+    with database() as connection:
+        connection.execute(
+            "INSERT INTO openai_usage (model, input_tokens, output_tokens, total_tokens, created_at) VALUES (?, ?, ?, ?, ?)",
+            (payload.get("model") or OPENAI_MODEL, *counts, datetime.now(timezone.utc).isoformat()),
+        )
+    content = payload["choices"][0]["message"]["content"]
     try:
         return json.loads(content)
     except (json.JSONDecodeError, TypeError) as exc:
@@ -309,6 +366,24 @@ def history():
     return jsonify([row_to_result(row) for row in rows])
 
 
+@app.get("/api/usage")
+def token_usage():
+    today = datetime.now(timezone.utc).date().isoformat()
+    with database() as connection:
+        totals = dict(connection.execute("""
+            SELECT COUNT(*) AS requests,
+                   COALESCE(SUM(input_tokens), 0) AS input_tokens,
+                   COALESCE(SUM(output_tokens), 0) AS output_tokens,
+                   COALESCE(SUM(total_tokens), 0) AS total_tokens,
+                   COALESCE(SUM(CASE WHEN created_at >= ? THEN total_tokens ELSE 0 END), 0) AS today_tokens,
+                   COUNT(*) - COUNT(total_tokens) AS unreported_requests,
+                   MIN(created_at) AS first_recorded_at
+            FROM openai_usage
+        """, (today,)).fetchone())
+        latest = connection.execute("SELECT * FROM openai_usage ORDER BY id DESC LIMIT 1").fetchone()
+    return jsonify(**totals, latest=dict(latest) if latest else None)
+
+
 @app.post("/api/generate")
 def generate():
     body = request.get_json(silent=True) or {}
@@ -318,7 +393,7 @@ def generate():
     try:
         return jsonify(create_from_prompt(prompt, source=body.get("source", "library")))
     except (AppError, requests.RequestException, spotify.SpotifyError) as exc:
-        return jsonify({"error": str(exc)}), 502
+        return jsonify({"error": str(exc), "help_url": getattr(exc, "help_url", None)}), getattr(exc, "status_code", 502)
 
 
 @app.post("/api/history/<int:playlist_id>/regenerate")
@@ -333,7 +408,7 @@ def regenerate(playlist_id: int):
     try:
         return jsonify(create_from_prompt(row["prompt"], old_tracks, row["source"]))
     except (AppError, requests.RequestException, spotify.SpotifyError) as exc:
-        return jsonify({"error": str(exc)}), 502
+        return jsonify({"error": str(exc), "help_url": getattr(exc, "help_url", None)}), getattr(exc, "status_code", 502)
 
 
 if __name__ == "__main__":

@@ -27,16 +27,60 @@
     .actions { display:flex; flex-direction:column; align-items:flex-end; gap:10px; } .date { white-space:nowrap; } .regen { background:var(--acid); color:var(--ink); padding:11px 14px; border:1px solid var(--ink); } .regen:hover { background:#b5d453; }
     a { color:var(--ink); font:500 11px 'DM Mono',monospace; text-transform:uppercase; } .empty { color:var(--muted); padding:25px 0; }
     @media (max-width:700px) { main { width:min(100% - 28px,1180px); padding-top:30px; } header { margin-bottom:30px; } .mark { width:58px; height:58px; font-size:9px; } .composer { grid-template-columns:1fr; } .generate { min-height:62px; border-left:0; border-top:2px solid var(--ink); } .playlist { grid-template-columns:1fr; } .actions { flex-direction:row; align-items:center; } }
+    .usage { margin:0 0 32px; padding:20px; border:1px solid var(--ink); background:#fffdf8; }
+    .usage h2 { font-size:18px; }
+    .usage-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:18px; margin:18px 0; }
+    .usage-value { display:block; font:500 clamp(20px,3vw,32px) 'DM Mono',monospace; margin-top:7px; overflow-wrap:anywhere; }
+    .usage-note { color:var(--muted); font-size:12px; line-height:1.5; margin:6px 0 0; }
+    .usage-bar { display:flex; height:8px; background:var(--line); margin-bottom:12px; }
+    .usage-input { background:var(--acid); } .usage-output { background:var(--red); }
+    @media (max-width:700px) { .usage-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
   </style>
+  <script src="{{ url_for('static', filename='themes.js') }}"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='themes.css') }}">
 </head>
 <body>
+<a class="skip-link" href="#prompt">Skip to playlist prompt</a>
 <main>
-  <header><div><div class="eyebrow">Local playlist studio / 001</div><h1>Make a mixtape<br>from a thought.</h1></div><div class="mark">PROMPT<br>→<br>PLAY</div></header>
-  <p><label for="source">Choose tracks from </label><select id="source"><option value="library">My MP3 library</option><option value="discovery">Broader discovery</option></select></p>
+  {% include '_theme_picker.html' %}
+  <header class="studio-header"><h1>Echo Receiver</h1></header>
+  <div class="signal-panel" aria-hidden="true">
+    <svg viewBox="0 0 1000 96" preserveAspectRatio="none" focusable="false">
+      <defs><pattern id="signal-grid" width="40" height="24" patternUnits="userSpaceOnUse"><path d="M40 0H0V24" fill="none" stroke="currentColor" stroke-opacity=".10"/></pattern></defs>
+      <rect width="1000" height="96" fill="url(#signal-grid)"/>
+      <path class="signal-secondary" d="M0 65H100V32H180V72H260V22H340V45H430V15H520V63H620V30H710V78H800V40H900V60H1000"/>
+      <path class="signal-primary" d="M0 48H120L130 42L140 54L150 48H245L255 32L268 67L281 20L295 76L310 38L320 48H450L460 40L472 56L485 48H565L580 22L595 74L610 12L625 85L640 30L655 55L665 48H785L795 38L805 60L815 48H1000"/>
+      <path class="signal-ticks" d="M0 2H25M0 94H25M975 2H1000M975 94H1000M500 0V10M500 86V96"/>
+    </svg>
+  </div>
+  <div class="workspace">
+  <div class="compose-column">
+  <section class="input-panel" aria-label="Create a playlist">
+  <p class="source-control"><label for="source">Choose tracks from </label><select id="source"><option value="library">My MP3 library</option><option value="discovery">Broader discovery</option></select></p>
+  <label class="prompt-label" for="prompt">Describe a sound, mood, or artist</label>
+  <section class="composer"><textarea id="prompt" aria-describedby="prompt-help" placeholder="A rainy-night drive through southern sludge, but with huge choruses and no obvious picks..."></textarea><button class="generate" id="generate">Generate <br>playlist</button></section>
   <p id="library-info" class="meta" aria-live="polite">Checking MP3 index…</p>
-  <section class="composer"><textarea id="prompt" autofocus placeholder="A rainy-night drive through southern sludge, but with huge choruses and no obvious picks..."></textarea><button class="generate" id="generate">Generate<br>playlist</button></section>
+  <p id="prompt-help" class="prompt-help">Include a mood, genre, artist, or number of tracks. Ctrl / ⌘ + Enter to generate.</p>
+  </section>
   <div class="status" id="status" role="status"></div>
-  <section><div class="section-head"><h2>Recent builds</h2><span class="meta" id="count"></span></div><div class="history" id="history"><div class="empty">No playlists yet. Give the machine a mood.</div></div></section>
+  <p id="error-help" hidden><a id="error-help-link" target="_blank" rel="noopener noreferrer">Open OpenAI settings ↗</a></p>
+  </div>
+  <section class="usage" aria-labelledby="usage-title">
+    <h2 id="usage-title">OpenAI usage</h2>
+    <div class="usage-grid">
+      <div><span class="meta">Total recorded</span><strong class="usage-value" id="usage-total">—</strong></div>
+      <div><span class="meta">Today (UTC)</span><strong class="usage-value" id="usage-today">—</strong></div>
+      <div><span class="meta">Input tokens</span><strong class="usage-value" id="usage-input">—</strong></div>
+      <div><span class="meta">Output tokens</span><strong class="usage-value" id="usage-output">—</strong></div>
+    </div>
+    <div class="usage-bar" aria-hidden="true"><span class="usage-input" id="usage-input-bar"></span><span class="usage-output" id="usage-output-bar"></span></div>
+    <details class="usage-details"><summary>Meter details</summary>
+    <p class="usage-note" id="usage-detail" role="status">Loading usage…</p>
+    <p class="usage-note">This app only, from when tracking was added. Earlier usage and requests with no usage response are excluded. Counts persist across restarts.</p>
+    </details>
+  </section>
+  </div>
+  <section class="history-panel"><div class="section-head"><h2>Recent builds</h2><span class="meta" id="count"></span></div><div class="history" id="history"><div class="empty">No playlists yet. Give the machine a mood.</div></div></section>
 </main>
 <script>
   const promptBox = document.querySelector('#prompt');
@@ -52,20 +96,42 @@
     history.innerHTML = items.map(item => `<article class="playlist"><div><div class="eyebrow">${escapeHtml(item.source === 'library' ? 'MP3 library / ' : 'Discovery / ')}${escapeHtml(item.prompt)}</div><h3>${escapeHtml(item.name)}</h3><p>${escapeHtml(item.description)}</p><div class="tracks">${item.tracks.slice(0,12).map(track => `<span class="track">${escapeHtml(track.artist)} / ${escapeHtml(track.title)}</span>`).join('')}${item.tracks.length > 12 ? `<span class="track">+${item.tracks.length - 12} more</span>` : ''}</div></div><div class="actions"><span class="meta date">${dateLabel(item.created_at)}</span>${item.spotify_url ? `<a href="${escapeHtml(item.spotify_url)}" target="_blank" rel="noreferrer">Open in Spotify ↗</a>` : ''}<button class="regen" data-id="${item.id}">Regenerate ↻</button></div></article>`).join('');
   }
   async function loadHistory() { const response = await fetch('/api/history'); render(await response.json()); }
+  async function loadUsage() {
+    try {
+      const response = await fetch('/api/usage', {cache:'no-store'});
+      if (!response.ok) throw new Error('Could not refresh usage.');
+      const data = await response.json();
+      for (const [id, key] of Object.entries({total:'total_tokens', today:'today_tokens', input:'input_tokens', output:'output_tokens'})) {
+        document.querySelector(`#usage-${id}`).textContent = data[key].toLocaleString();
+      }
+      const total = data.input_tokens + data.output_tokens;
+      document.querySelector('#usage-input-bar').style.width = `${total ? data.input_tokens / total * 100 : 0}%`;
+      document.querySelector('#usage-output-bar').style.width = `${total ? data.output_tokens / total * 100 : 0}%`;
+      document.querySelector('#usage-detail').textContent = data.requests
+        ? `${data.requests.toLocaleString()} API responses recorded · Since ${dateLabel(data.first_recorded_at)} · Latest: ${data.latest.total_tokens === null ? 'usage unavailable' : data.latest.total_tokens.toLocaleString() + ' tokens'} (${data.latest.model})${data.unreported_requests ? ` · ${data.unreported_requests} responses without token counts` : ''}`
+        : 'Ready to measure your next playlist. Library mode uses two API calls; discovery uses one.';
+    } catch (error) {
+      document.querySelector('#usage-detail').textContent = 'Usage unavailable. Any displayed counts may be out of date; retrying automatically.';
+    }
+  }
   async function submit(url, body) {
+    if (button.disabled) return;
+    document.querySelector('#error-help').hidden = true;
     button.disabled = true; status.textContent = 'CURATING / RESOLVING / PRESSING...';
-    try { const response = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Something went wrong.'); status.textContent = `Built “${data.name}” with ${data.tracks.length} resolved tracks.${data.missing?.length ? ` ${data.missing.length} unavailable on Spotify: ${data.missing.join('; ')}` : ''}`; promptBox.value = ''; await loadHistory(); }
-    catch (error) { status.textContent = error.message; } finally { button.disabled = false; }
+    try { const response = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); const data = await response.json(); if (!response.ok) { if (['https://platform.openai.com/settings/organization/billing/', 'https://platform.openai.com/settings/organization/limits'].includes(data.help_url)) { const link = document.querySelector('#error-help-link'); link.href = data.help_url; link.textContent = data.help_url.includes('/billing/') ? 'Open OpenAI API billing ↗' : 'Open OpenAI API limits ↗'; document.querySelector('#error-help').hidden = false; } throw new Error(data.error || 'Something went wrong.'); } status.textContent = `Built “${data.name}” with ${data.tracks.length} resolved tracks.${data.missing?.length ? ` ${data.missing.length} unavailable on Spotify: ${data.missing.join('; ')}` : ''}`; promptBox.value = ''; await loadHistory(); }
+    catch (error) { status.textContent = error.message; } finally { button.disabled = false; await loadUsage(); }
   }
   button.addEventListener('click', () => submit('/api/generate', {prompt:promptBox.value, source:document.querySelector('#source').value}));
   promptBox.addEventListener('keydown', event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') button.click(); });
   history.addEventListener('click', event => { if (event.target.matches('.regen')) submit(`/api/history/${event.target.dataset.id}/regenerate`, {}); });
   fetch('/api/library').then(response => response.json()).then(data => {
     document.querySelector('#library-info').textContent = data.available
-      ? `${data.tracks.toLocaleString()} unique indexed tracks · Try “bass-heavy, darker sound, slower tempo.” Library mode sends candidate metadata and sound scores to the playlist model.`
+      ? `${data.tracks.toLocaleString()} tracks indexed · Library ready`
       : data.error;
   }).catch(() => { document.querySelector('#library-info').textContent = 'Could not check the MP3 index.'; });
   loadHistory();
+  loadUsage();
+  setInterval(() => { if (!document.hidden) loadUsage(); }, 10000);
 </script>
 </body>
 </html>
