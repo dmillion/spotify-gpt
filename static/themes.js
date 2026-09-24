@@ -185,18 +185,48 @@
         padding:13px 22px;
         border:1px solid var(--ink);
         font-size:14px;
+        transition:
+          background-color 150ms ease-out,
+          color 150ms ease-out,
+          border-color 150ms ease-out,
+          box-shadow 180ms ease-out,
+          transform 150ms ease-out;
       }
       .composer-actions .generate {
         min-width:190px;
         border-left:1px solid var(--ink);
       }
       .idea-button {
-        min-width:160px;
-        background:transparent;
+        min-width:190px;
+        background:var(--control);
         color:var(--ink);
+        font:600 14px/1.35 'Space Grotesk',sans-serif;
       }
-      .idea-button:hover { background:var(--acid); }
+      .idea-button:hover {
+        background:var(--acid);
+        color:var(--button-ink);
+      }
+      .composer-actions .generate:hover,
+      .composer-actions .idea-button:hover {
+        transform:translateY(-1px);
+      }
       .idea-button:disabled { cursor:wait; opacity:.65; }
+      html:is([data-theme='deep-space'],[data-theme='amber']) .composer-actions .idea-button {
+        color:var(--acid);
+        background:var(--control);
+        border-color:var(--line-strong);
+        font:500 15px/1.6 'DM Mono',monospace;
+      }
+      html:is([data-theme='deep-space'],[data-theme='amber']) .composer-actions .idea-button:hover {
+        color:var(--button-ink);
+        background:var(--acid);
+        border-color:var(--acid);
+        box-shadow:0 0 16px var(--glow), inset 0 0 0 1px var(--acid);
+      }
+      html:is([data-theme='deep-space'],[data-theme='amber']) .composer-actions .generate:hover {
+        color:var(--button-ink);
+        box-shadow:0 0 16px var(--glow);
+      }
       .prompt-clear {
         position:absolute;
         z-index:3;
