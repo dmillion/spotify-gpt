@@ -58,7 +58,7 @@
   <section class="input-panel" aria-label="Create a playlist">
   <p class="source-control"><label for="source">Choose tracks from </label><select id="source"><option value="library">My MP3 library</option><option value="discovery">Broader discovery</option></select></p>
   <label class="prompt-label" for="prompt">Describe a sound, mood, or artist</label>
-  <section class="composer"><textarea id="prompt" aria-describedby="prompt-help" placeholder="A rainy-night drive through southern sludge, but with huge choruses and no obvious picks..."></textarea><button class="generate" id="generate">Generate <br>playlist</button></section>
+  <section class="composer"><textarea id="prompt" aria-describedby="prompt-help" placeholder="Pick an artist or sound and describe where you want it to go..."></textarea><button class="generate" id="generate">Generate <br>playlist</button></section>
   <p id="library-info" class="meta" aria-live="polite">Checking MP3 index…</p>
   <p id="prompt-help" class="prompt-help">Include a mood, genre, artist, or number of tracks. Ctrl / ⌘ + Enter to generate.</p>
   </section>
@@ -94,42 +94,104 @@
   let promptIdeas = [];
   let lastPromptIdea = '';
 
+  function genreTheme(genres) {
+    const text = genres.join(' ').toLowerCase();
+    const theme = (scenes, qualities, constraints) => ({scenes, qualities, constraints});
+    if (/(ambient|drone|new age|soundscape|neoclassical|meditation)/.test(text)) {
+      return theme(
+        ['a sleepless 2 a.m. room', 'a slow sunrise', 'a long empty highway at night', 'a rain-muted window', 'a dark room with only streetlight coming in'],
+        ['spacious and slow-moving', 'hazy and immersive', 'minimal but emotionally heavy', 'soft-edged and nocturnal', 'patient, textural, and low-lit'],
+        ['avoid sudden energy spikes', 'let tracks breathe', 'favor long transitions', 'keep percussion restrained', 'stay immersive rather than dramatic']
+      );
+    }
+    if (/(sludge|doom|stoner|desert rock|heavy psych|southern metal)/.test(text)) {
+      return theme(
+        ['a humid basement show', 'a desert highway after midnight', 'a blown-speaker practice room', 'a smoky bar near closing', 'a slow crawl through industrial backroads'],
+        ['low-slung and riff-heavy', 'dirty, bass-heavy, and physical', 'fuzzy with real forward motion', 'massive without turning static', 'groove-first and rough-edged'],
+        ['favor big riffs', 'avoid overly polished production', 'keep the low end huge', 'skip long shapeless intros', 'lean into deep cuts']
+      );
+    }
+    if (/(black metal|post-black|atmospheric black)/.test(text)) {
+      return theme(
+        ['a freezing predawn walk', 'a storm moving over empty fields', 'a blacked-out highway', 'a windswept ridge', 'a dim winter room'],
+        ['cold, urgent, and atmospheric', 'raw but expansive', 'melodic without softening the edges', 'bleak with forward momentum', 'abrasive and cinematic'],
+        ['avoid glossy production', 'keep the atmosphere tense', 'favor long arcs that still move', 'skip novelty picks', 'let melody emerge through the noise']
+      );
+    }
+    if (/(death metal|grind|grindcore|hardcore|powerviolence|metalcore)/.test(text)) {
+      return theme(
+        ['a packed concrete room', 'a short violent commute', 'a fluorescent warehouse', 'a late-night gym session', 'a chaotic basement set'],
+        ['percussive and relentless', 'dense but sharply rhythmic', 'fast with real groove underneath', 'ugly in a controlled way', 'compact, physical, and immediate'],
+        ['keep dead air to a minimum', 'favor memorable breakdowns or rhythmic turns', 'avoid overlong intros', 'keep transitions aggressive', 'lean toward tracks with strong momentum']
+      );
+    }
+    if (/(shoegaze|dream pop|slowcore|ethereal|indie pop)/.test(text)) {
+      return theme(
+        ['a wet city drive after dark', 'a washed-out summer evening', 'a bedroom with the windows open', 'a gray Sunday afternoon', 'a train ride through rain'],
+        ['hazy but melodic', 'soft-focus with strong hooks', 'washed-out and emotionally direct', 'dreamy without becoming weightless', 'warm, layered, and bittersweet'],
+        ['keep the melodies strong', 'avoid abrupt stylistic jumps', 'favor texture over virtuosity', 'let the sequence gradually deepen', 'skip overly bright pop detours']
+      );
+    }
+    if (/(techno|house|electronic|idm|electro|dnb|drum and bass|breakbeat|synthwave)/.test(text)) {
+      return theme(
+        ['a nearly empty club at 3 a.m.', 'a neon highway', 'a dark warehouse', 'a late-night coding session', 'a city train after midnight'],
+        ['hypnotic and pulse-driven', 'textural with a strong rhythmic spine', 'mechanical but warm', 'propulsive without getting frantic', 'deep, repetitive, and immersive'],
+        ['keep the transitions seamless', 'favor interesting production details', 'avoid cheesy festival peaks', 'let the groove evolve gradually', 'stay focused on rhythm and texture']
+      );
+    }
+    if (/(hip hop|rap|boom bap|trap|abstract hip hop|underground hip hop)/.test(text)) {
+      return theme(
+        ['a night drive through the city', 'a dusty record-store afternoon', 'a low-key house party', 'a long train ride', 'a late summer evening'],
+        ['rhythm-first and production-heavy', 'dusty and sample-rich', 'bass-forward with sharp drums', 'left-field but still head-nodding', 'moody with strong pocket'],
+        ['favor distinctive beats', 'avoid generic radio picks', 'keep the sequencing rhythmic', 'lean into deep cuts', 'let production style guide the transitions']
+      );
+    }
+    if (/(punk|post-punk|garage|noise rock|post-hardcore)/.test(text)) {
+      return theme(
+        ['a tiny club with bad lighting', 'a fast drive across town', 'a half-empty dive bar', 'a cramped practice space', 'a gray afternoon with too much caffeine'],
+        ['raw and kinetic', 'angular with strong momentum', 'scrappy but hooky', 'noisy without losing the song', 'tense and rhythm-forward'],
+        ['avoid slick production', 'keep the energy moving', 'favor memorable guitar or bass lines', 'skip filler', 'stay rough around the edges']
+      );
+    }
+    if (/(country|americana|folk|bluegrass|alt-country)/.test(text)) {
+      return theme(
+        ['a two-lane road at dusk', 'a quiet bar after last call', 'a hot afternoon with the windows down', 'a long rural drive', 'a porch after a storm'],
+        ['warm and lived-in', 'dusty with strong storytelling', 'melodic and unpolished', 'rootsy without getting sleepy', 'plainspoken with some grit'],
+        ['avoid glossy crossover production', 'favor strong songwriting', 'lean into deep cuts', 'keep the pacing natural', 'let the instrumentation feel human']
+      );
+    }
+    if (/(jazz|fusion|bebop|soul jazz|spiritual jazz)/.test(text)) {
+      return theme(
+        ['a dim room after midnight', 'a rainy afternoon', 'a quiet dinner that turns strange', 'a late train ride', 'a small club near closing'],
+        ['loose but purposeful', 'warm, intricate, and rhythmic', 'improvisational without losing direction', 'smoky and harmonically rich', 'restless but controlled'],
+        ['favor strong interplay', 'avoid background-music blandness', 'let the arrangements breathe', 'keep a rhythmic thread', 'mix familiar language with stranger turns']
+      );
+    }
+    return theme(
+      ['a late-night drive', 'a gray afternoon', 'a long walk with headphones', 'a low-key weekend night', 'a road trip with no schedule'],
+      ['coherent and characterful', 'melodic with some edge', 'deep-cut friendly', 'textured without losing momentum', 'distinctive rather than generic'],
+      ['stay close to the artist’s musical neighborhood', 'favor deep cuts', 'make transitions feel intentional', 'avoid obvious filler', 'keep a consistent sonic thread']
+    );
+  }
+
   function buildPromptIdeas(profile) {
-    const genres = Array.isArray(profile.genres) ? profile.genres : [];
-    const artists = Array.isArray(profile.artists) ? profile.artists : [];
-    const scenes = [
-      'a rain-soaked late-night drive', 'a grimy basement show', 'a desert highway after midnight',
-      'a smoky bar at closing time', 'a neon-lit city drive', 'a summer back-road cruise',
-      'an anxious 2 a.m. comedown', 'a Sunday morning that gets progressively heavier',
-      'a warehouse set with the lights almost off', 'a cold-weather walk with nowhere to be'
-    ];
-    const qualities = [
-      'heavy but still melodic', 'groove-forward and dirty', 'fuzzy and bass-heavy',
-      'dark, rhythmic, and hooky', 'raw without turning shapeless', 'weird but still catchy',
-      'fast without becoming frantic', 'slow and massive without becoming sleepy',
-      'tense, noisy, and full of momentum', 'warm, blown-out, and a little psychedelic'
-    ];
-    const constraints = [
-      'no obvious picks', 'lean into deep cuts', 'keep the momentum up', 'avoid anything too polished',
-      'favor big riffs and strong hooks', 'let it get stranger as it goes', 'keep the low end huge',
-      'avoid long ambient detours', 'make the transitions feel intentional', 'stay rough around the edges'
-    ];
+    const profiles = Array.isArray(profile.profiles) ? profile.profiles : [];
+    if (!profiles.length) return [];
     const ideas = [];
-    for (let i = 0; i < 18; i += 1) {
-      const genreA = sample(genres);
-      const genreB = sample(genres.filter(genre => genre !== genreA));
-      const artist = sample(artists);
-      const scene = sample(scenes);
-      const quality = sample(qualities);
-      const constraint = sample(constraints);
-      if (genreA && genreB && i % 3 === 0) {
-        ideas.push(`${scene} through ${genreA} and ${genreB}; ${quality}, ${constraint}...`);
-      } else if (artist && genreA && i % 3 === 1) {
-        ideas.push(`Start near ${artist}, drift into ${genreA}, and build ${scene}; ${constraint}...`);
-      } else if (genreA) {
-        ideas.push(`${genreA} for ${scene}, ${quality}; ${constraint}...`);
-      } else if (artist) {
-        ideas.push(`Use ${artist} as a loose starting point for ${scene}; ${quality}, ${constraint}...`);
+    for (let i = 0; i < 24; i += 1) {
+      const artist = sample(profiles);
+      const genres = Array.isArray(artist.genres) ? artist.genres : [];
+      const primaryGenre = sample(genres);
+      const theme = genreTheme(genres);
+      const scene = sample(theme.scenes);
+      const quality = sample(theme.qualities);
+      const constraint = sample(theme.constraints);
+      if (primaryGenre && i % 2 === 0) {
+        ideas.push(`Start with ${artist.name}'s ${primaryGenre} side and build toward ${scene}; ${quality}, ${constraint}...`);
+      } else if (primaryGenre) {
+        ideas.push(`Build a ${primaryGenre} playlist around ${artist.name}: ${quality}; ${constraint}...`);
+      } else {
+        ideas.push(`Use ${artist.name} as the anchor and stay close to adjacent artists and deep cuts; make the transitions feel intentional...`);
       }
     }
     return [...new Set(ideas)];
