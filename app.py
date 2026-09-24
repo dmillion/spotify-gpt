@@ -391,14 +391,25 @@ def ask_for_hybrid_playlist(prompt: str, excluded_tracks=None) -> dict:
         payload = model_json(
             "Curate a playlist from the supplied hybrid candidate pool. Return JSON: "
             '{"name":"short name","description":"one sentence","tracks":[{"candidate_id":"local:123"}]}. '
-            "Pick 20 tracks unless the user asks otherwise, never more than available. Local-library candidates "
-            "are the highest-confidence source because they include the user's own metadata and measured audio "
-            "features. Prefer local candidates when choices are comparably suitable and normally keep a clear "
-            "majority of the playlist local, but do not enforce a quota: use Last.fm-supported outside tracks "
-            "when they improve stylistic accuracy, breadth, deep-cut variety, or fill gaps in the local collection. "
-            "Last.fm similarity is collaborative-listening evidence, not an objective quality score. Local sound "
-            "measurements are authoritative for measurable sonic constraints. Use only supplied candidate_id values; "
-            "never invent tracks or IDs. Candidate pool: " + json.dumps(model_candidates) + exclusion,
+            "Pick 20 tracks unless the user asks otherwise, never more than available. Treat an artist named in the "
+            "user's prompt as an anchor or starting reference unless the user explicitly asks for a playlist dominated "
+            "by that artist; do not assume the anchor should make up most of the playlist. Normally use only one track "
+            "per artist when comparably suitable alternatives exist, and normally no more than two tracks from any one "
+            "artist. Never place a long run of the same artist together unless the user explicitly requests it. Favor "
+            "artist diversity that still preserves a coherent musical neighborhood rather than diversity for its own sake. "
+            "Interpret phrases such as 'build toward', 'start with', 'end with', 'get heavier', 'ease into', or similar "
+            "directional language as sequencing instructions: construct a deliberate early, middle, and late arc, with "
+            "adjacent tracks making intelligible stylistic transitions. The opening should establish the requested anchor; "
+            "the middle should broaden through musically adjacent territory; the ending should arrive at the requested "
+            "destination without abrupt unrelated jumps. Preserve momentum when the prompt asks for heaviness, riffs, groove, "
+            "or forward motion; do not let similarity clustering create repetitive blocks. Local-library candidates are the "
+            "highest-confidence source because they include the user's own metadata and measured audio features. Prefer local "
+            "candidates when choices are comparably suitable and normally keep a clear majority of the playlist local, but do "
+            "not enforce a quota: use Last.fm-supported outside tracks when they improve stylistic accuracy, sequencing, breadth, "
+            "deep-cut variety, or fill gaps in the local collection. Last.fm similarity is collaborative-listening evidence, not "
+            "an objective quality score and not permission to overpopulate one artist or cluster. Local sound measurements are "
+            "authoritative for measurable sonic constraints. Use only supplied candidate_id values; never invent tracks or IDs. "
+            "Candidate pool: " + json.dumps(model_candidates) + exclusion,
             prompt,
         )
         if not isinstance(payload, dict) or not isinstance(payload.get("tracks"), list):
