@@ -16,6 +16,7 @@ import requests
 from dotenv import load_dotenv
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 
+import lastfm_client as lastfm
 import spotify_playlist as spotify
 from audio.library_context import Library
 
@@ -424,29 +425,34 @@ def prompt_profile():
 
         sampled_artists = list(artist_refs.items())
         random.shuffle(sampled_artists)
-        sampled_artists = sampled_artists[:24]
+        sampled_artists = sampled_artists[:30]
 
         profiles = []
         genre_counts: dict[str, int] = {}
-        for artist_id, fallback_name in sampled_artists:
-            try:
-                artist = spotify.api_request("GET", f"/artists/{artist_id}", token).json()
-            except requests.RequestException:
-                artist = {"name": fallback_name, "genres": []}
-            name = str(artist.get("name") or fallback_name).strip()
+        for _artist_id, name in sampled_artists:
             genres = []
-            for raw_genre in artist.get("genres") or []:
-                genre = str(raw_genre).strip().lower()
-                if genre and genre not in genres:
-                    genres.append(genre)
-            for genre in local_genres.get(name.casefold(), []):
-                if genre not in genres:
-                    genres.append(genre)
+            weighted_tags = []
+            if lastfm.API_KEY:
+                try:
+                    weighted_tags = lastfm.filtered_top_tags(name, min_weight=5, limit=6)
+                    genres.extend(tag["name"] for tag in weighted_tags)
+                except (requests.RequestException, RuntimeError, ValueError):
+                    pass
+
+            if not genres:
+                genres.extend(local_genres.get(name.casefold(), []))
+
             if not name or not genres:
                 continue
+
             for genre in genres:
                 genre_counts[genre] = genre_counts.get(genre, 0) + 1
-            profiles.append({"name": name, "genres": genres[:6]})
+            profiles.append({
+                "name": name,
+                "genres": genres[:6],
+                "tags": weighted_tags,
+                "genre_source": "lastfm" if weighted_tags else "local",
+            })
             if len(profiles) >= 18:
                 break
 
@@ -460,7 +466,7 @@ def prompt_profile():
             "artists": [profile["name"] for profile in profiles],
             "genres": genres,
             "profiles": profiles,
-            "source": "liked-songs",
+            "source": "liked-songs+lastfm",
         })
     except (requests.RequestException, spotify.SpotifyError) as exc:
         return jsonify({"artists": [], "genres": [], "profiles": [], "error": str(exc)}), 502
