@@ -7,6 +7,7 @@ import hmac
 import json
 import os
 import sqlite3
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -194,7 +195,6 @@ def model_json(instructions: str, prompt: str) -> dict:
     )
     check_openai_response(response)
     payload = response.json()
-    # Save usage before parsing content or doing any Spotify work.
     usage = payload.get("usage") or {}
     counts = [usage.get(key) for key in ("prompt_tokens", "completion_tokens", "total_tokens")]
     if not all(type(value) is int and value >= 0 for value in counts):
@@ -355,6 +355,32 @@ def library_status():
         return jsonify({"available": True, "tracks": len(library.rows), "axes": list(library.summary()["axes"])})
     except (ValueError, sqlite3.Error) as exc:
         return jsonify({"available": False, "error": str(exc)})
+
+
+@app.get("/api/prompt-profile")
+def prompt_profile():
+    if not spotify.CLIENT_ID:
+        return jsonify({"artists": [], "genres": [], "error": "Spotify is not configured."}), 503
+    try:
+        artists = spotify.top_artists(spotify.get_access_token(), limit=24, time_range="medium_term")
+        genre_counts: Counter[str] = Counter()
+        artist_names = []
+        total = len(artists)
+        for index, artist in enumerate(artists):
+            name = str(artist.get("name") or "").strip()
+            if name:
+                artist_names.append(name)
+            rank_weight = max(1, total - index)
+            for raw_genre in artist.get("genres") or []:
+                genre = str(raw_genre).strip().lower()
+                if genre:
+                    genre_counts[genre] += rank_weight
+        return jsonify({
+            "artists": artist_names[:12],
+            "genres": [genre for genre, _ in genre_counts.most_common(12)],
+        })
+    except (requests.RequestException, spotify.SpotifyError) as exc:
+        return jsonify({"artists": [], "genres": [], "error": str(exc)}), 502
 
 
 @app.get("/api/history")
