@@ -111,12 +111,26 @@ html:is([data-theme='deep-space'],[data-theme='amber']) .signal-panel { display:
 .signal-caption { display:flex; justify-content:space-between; gap:12px; font:10px/1.5 'DM Mono',monospace; letter-spacing:.12em; color:var(--muted); }
 .signal-panel svg { display:block; width:100%; height:32px; margin:5px 0; }
 .signal-primary, .signal-secondary, .signal-ticks { fill:none; stroke:currentColor; stroke-width:1; vector-effect:non-scaling-stroke; }
-.signal-primary { opacity:.55; stroke-dasharray:1100; stroke-dashoffset:0; animation:signal-acquire 4.8s ease-out both; }
-.signal-secondary { opacity:.16; stroke-width:.75; }
-/* A short acquisition sweep settles before five seconds; no persistent motion. */
-@keyframes signal-acquire {
-  from { stroke-dashoffset:1100; opacity:.25; }
-  to { stroke-dashoffset:0; opacity:.55; }
+.signal-primary {
+  opacity:.55;
+  stroke-dasharray:120 980;
+  stroke-dashoffset:1100;
+  animation:signal-stream 4.2s linear infinite;
+}
+.signal-secondary {
+  opacity:.16;
+  stroke-width:.75;
+  animation:signal-breathe 2.4s ease-in-out infinite alternate;
+}
+@keyframes signal-stream {
+  from { stroke-dashoffset:1100; opacity:.28; }
+  15% { opacity:.7; }
+  85% { opacity:.7; }
+  to { stroke-dashoffset:-1100; opacity:.28; }
+}
+@keyframes signal-breathe {
+  from { opacity:.10; }
+  to { opacity:.24; }
 }
 .signal-ticks { stroke:var(--red); stroke-width:1.5; opacity:.6; }
 html:is([data-theme='deep-space'],[data-theme='amber']) .input-panel,
