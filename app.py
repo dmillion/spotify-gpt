@@ -6,8 +6,8 @@ from __future__ import annotations
 import hmac
 import json
 import os
+import random
 import sqlite3
-from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -360,27 +360,69 @@ def library_status():
 @app.get("/api/prompt-profile")
 def prompt_profile():
     if not spotify.CLIENT_ID:
-        return jsonify({"artists": [], "genres": [], "error": "Spotify is not configured."}), 503
+        return jsonify({"artists": [], "genres": [], "profiles": [], "error": "Spotify is not configured."}), 503
     try:
-        artists = spotify.top_artists(spotify.get_access_token(), limit=24, time_range="medium_term")
-        genre_counts: Counter[str] = Counter()
-        artist_names = []
-        total = len(artists)
-        for index, artist in enumerate(artists):
-            name = str(artist.get("name") or "").strip()
-            if name:
-                artist_names.append(name)
-            rank_weight = max(1, total - index)
+        token = spotify.get_access_token()
+        first_page = spotify.api_request(
+            "GET", "/me/tracks", token, params={"limit": 1, "offset": 0}
+        ).json()
+        total = int(first_page.get("total") or 0)
+        if total <= 0:
+            return jsonify({"artists": [], "genres": [], "profiles": []})
+
+        page_offsets = list(range(0, total, 50))
+        sampled_offsets = random.sample(page_offsets, min(4, len(page_offsets)))
+        artist_refs: dict[str, str] = {}
+        for offset in sampled_offsets:
+            page = spotify.api_request(
+                "GET",
+                "/me/tracks",
+                token,
+                params={"limit": 50, "offset": offset},
+            ).json()
+            for item in page.get("items") or []:
+                track = item.get("track") or {}
+                for artist in track.get("artists") or []:
+                    artist_id = str(artist.get("id") or "").strip()
+                    name = str(artist.get("name") or "").strip()
+                    if artist_id and name:
+                        artist_refs.setdefault(artist_id, name)
+
+        sampled_artists = list(artist_refs.items())
+        random.shuffle(sampled_artists)
+        sampled_artists = sampled_artists[:18]
+
+        profiles = []
+        genre_counts: dict[str, int] = {}
+        for artist_id, fallback_name in sampled_artists:
+            try:
+                artist = spotify.api_request("GET", f"/artists/{artist_id}", token).json()
+            except requests.RequestException:
+                artist = {"name": fallback_name, "genres": []}
+            name = str(artist.get("name") or fallback_name).strip()
+            genres = []
             for raw_genre in artist.get("genres") or []:
                 genre = str(raw_genre).strip().lower()
-                if genre:
-                    genre_counts[genre] += rank_weight
+                if genre and genre not in genres:
+                    genres.append(genre)
+                    genre_counts[genre] = genre_counts.get(genre, 0) + 1
+            if name:
+                profiles.append({"name": name, "genres": genres[:6]})
+
+        genres = [
+            genre
+            for genre, _ in sorted(
+                genre_counts.items(), key=lambda item: (-item[1], item[0])
+            )[:12]
+        ]
         return jsonify({
-            "artists": artist_names[:12],
-            "genres": [genre for genre, _ in genre_counts.most_common(12)],
+            "artists": [profile["name"] for profile in profiles],
+            "genres": genres,
+            "profiles": profiles,
+            "source": "liked-songs",
         })
     except (requests.RequestException, spotify.SpotifyError) as exc:
-        return jsonify({"artists": [], "genres": [], "error": str(exc)}), 502
+        return jsonify({"artists": [], "genres": [], "profiles": [], "error": str(exc)}), 502
 
 
 @app.get("/api/history")
