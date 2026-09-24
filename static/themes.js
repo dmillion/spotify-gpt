@@ -139,6 +139,15 @@
     const crtToggle = document.querySelector('#crt-toggle');
     const feedback = document.querySelector('#theme-feedback');
 
+    const usageTitle = document.querySelector('#usage-title');
+    if (usageTitle) usageTitle.textContent = 'Ollama usage';
+    const usageNotes = document.querySelectorAll('.usage-details .usage-note');
+    if (usageNotes.length > 1) {
+      usageNotes[1].textContent = 'BitRaider token counts reported by Ollama only. This meter does not represent your account-wide remaining free starter credits; check Ollama for that balance.';
+    }
+    const errorHelpLink = document.querySelector('#error-help-link');
+    if (errorHelpLink) errorHelpLink.textContent = 'Open Ollama settings ↗';
+
     if (picker) {
       picker.value = selected;
       picker.addEventListener('change', () => {
