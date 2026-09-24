@@ -240,7 +240,7 @@
   async function submit(url, body) {
     if (button.disabled) return;
     document.querySelector('#error-help').hidden = true;
-    button.disabled = true; status.textContent = 'CURATING / RESOLVING / PRESSING...';
+    button.disabled = true; status.textContent = 'CURATING / RESOLVING / GENERATING...';
     try { const response = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); const data = await response.json(); if (!response.ok) { if (['https://platform.openai.com/settings/organization/billing/', 'https://platform.openai.com/settings/organization/limits'].includes(data.help_url)) { const link = document.querySelector('#error-help-link'); link.href = data.help_url; link.textContent = data.help_url.includes('/billing/') ? 'Open OpenAI API billing ↗' : 'Open OpenAI API limits ↗'; document.querySelector('#error-help').hidden = false; } throw new Error(data.error || 'Something went wrong.'); } status.textContent = `Built “${data.name}” with ${data.tracks.length} resolved tracks.${data.missing?.length ? ` ${data.missing.length} unavailable on Spotify: ${data.missing.join('; ')}` : ''}`; promptBox.value = ''; rotatePromptPlaceholder(); await loadHistory(); }
     catch (error) { status.textContent = error.message; } finally { button.disabled = false; await loadUsage(); }
   }
