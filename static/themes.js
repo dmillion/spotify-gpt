@@ -9,6 +9,7 @@
   let crtEnabled = false;
   let ideaProfiles = [];
   let lastIdeaArtist = '';
+  let historyEnhanceInFlight = false;
 
   try {
     const saved = localStorage.getItem(key) || localStorage.getItem(legacyKey);
@@ -29,6 +30,13 @@
   };
 
   const sample = items => items.length ? items[Math.floor(Math.random() * items.length)] : '';
+  const loadingIcon = () => `
+    <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2" opacity=".22"></circle>
+      <path d="M12 3a9 9 0 0 1 9 9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square">
+        <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur=".8s" repeatCount="indefinite"></animateTransform>
+      </path>
+    </svg>`;
 
   function genreTheme(genres) {
     const text = genres.join(' ').toLowerCase();
@@ -134,6 +142,64 @@
     return ideaProfiles;
   }
 
+  async function enhanceHistoryTracks() {
+    const history = document.querySelector('#history');
+    const articles = history ? Array.from(history.querySelectorAll('.playlist')) : [];
+    if (!articles.length || historyEnhanceInFlight) return;
+    historyEnhanceInFlight = true;
+    try {
+      const response = await fetch('/api/history', {cache: 'no-store'});
+      if (!response.ok) return;
+      const items = await response.json();
+      articles.forEach((article, index) => {
+        const item = items[index];
+        const tracks = article.querySelector('.tracks');
+        if (!tracks || !item || !Array.isArray(item.tracks) || item.tracks.length <= 12 || tracks.dataset.expandable === 'true') return;
+        const marker = Array.from(tracks.querySelectorAll('.track')).find(element => /^\+\d+ more$/i.test(element.textContent.trim()));
+        if (!marker) return;
+
+        const remaining = item.tracks.slice(12);
+        tracks.dataset.expandable = 'true';
+        marker.setAttribute('role', 'button');
+        marker.setAttribute('tabindex', '0');
+        marker.setAttribute('aria-expanded', 'false');
+        marker.setAttribute('aria-label', `Show ${remaining.length} more tracks`);
+
+        const toggle = () => {
+          const expanded = marker.getAttribute('aria-expanded') === 'true';
+          if (expanded) {
+            tracks.querySelectorAll('.track-extra').forEach(element => element.remove());
+            marker.textContent = `+${remaining.length} more`;
+            marker.setAttribute('aria-expanded', 'false');
+            marker.setAttribute('aria-label', `Show ${remaining.length} more tracks`);
+            return;
+          }
+          remaining.forEach(track => {
+            const chip = document.createElement('span');
+            chip.className = 'track track-extra';
+            chip.textContent = `${track.artist} / ${track.title}`;
+            tracks.insertBefore(chip, marker);
+          });
+          marker.textContent = 'Show less';
+          marker.setAttribute('aria-expanded', 'true');
+          marker.setAttribute('aria-label', 'Show fewer tracks');
+        };
+
+        marker.addEventListener('click', toggle);
+        marker.addEventListener('keydown', event => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            toggle();
+          }
+        });
+      });
+    } catch (_) {
+      // History remains usable even if expansion metadata cannot be refreshed.
+    } finally {
+      historyEnhanceInFlight = false;
+    }
+  }
+
   document.addEventListener('DOMContentLoaded', () => {
     const picker = document.querySelector('#theme-select');
     const crtToggle = document.querySelector('#crt-toggle');
@@ -143,7 +209,7 @@
     if (usageTitle) usageTitle.textContent = 'Ollama usage';
     const usageNotes = document.querySelectorAll('.usage-details .usage-note');
     if (usageNotes.length > 1) {
-      usageNotes[1].textContent = 'BitRaider token counts reported by Ollama only. This meter does not represent your account-wide remaining free starter credits; check Ollama for that balance.';
+      usageNotes[1].textContent = 'Tone Raider token counts reported by Ollama only. This meter does not represent your account-wide remaining free starter credits; check Ollama for that balance.';
     }
     const errorHelpLink = document.querySelector('#error-help-link');
     if (errorHelpLink) errorHelpLink.textContent = 'Open Ollama settings ↗';
@@ -192,6 +258,8 @@
     const promptBox = document.querySelector('#prompt');
     const composer = document.querySelector('.composer');
     const generateButton = document.querySelector('#generate');
+    const status = document.querySelector('#status');
+    const history = document.querySelector('#history');
     if (!promptBox || !composer || !generateButton) return;
 
     window.rotatePromptPlaceholder = () => {};
@@ -215,8 +283,25 @@
     clearButton.textContent = '×';
     composer.appendChild(clearButton);
 
+    if (status) {
+      const decorateStatus = () => {
+        const text = status.textContent.trim();
+        if (text.startsWith('CURATING /') && !status.querySelector('svg')) {
+          status.innerHTML = `${loadingIcon()} <span>${text}</span>`;
+        }
+      };
+      new MutationObserver(decorateStatus).observe(status, {childList: true, characterData: true, subtree: true});
+      decorateStatus();
+    }
+
+    if (history) {
+      new MutationObserver(() => enhanceHistoryTracks()).observe(history, {childList: true});
+      enhanceHistoryTracks();
+    }
+
     ideaButton.addEventListener('click', async () => {
       ideaButton.disabled = true;
+      ideaButton.innerHTML = `${loadingIcon()} <span>Finding Idea…</span>`;
       try {
         const profiles = await ensureIdeaProfiles();
         const alternatives = profiles.filter(artist => artist.name !== lastIdeaArtist);
@@ -226,9 +311,9 @@
         promptBox.dispatchEvent(new Event('input', {bubbles: true}));
         promptBox.focus();
       } catch (error) {
-        const status = document.querySelector('#status');
         if (status) status.textContent = error.message;
       } finally {
+        ideaButton.textContent = 'Give Me Ideas';
         ideaButton.disabled = false;
       }
     });
