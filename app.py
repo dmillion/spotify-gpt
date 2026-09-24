@@ -25,8 +25,8 @@ load_dotenv()
 ROOT = Path(__file__).parent
 DATABASE = Path(os.environ.get("PLAYLIST_HISTORY_DB", ROOT / "data" / "playlist_history.db"))
 AUDIO_DATABASE = Path(os.environ.get("AUDIO_LIBRARY_DB", ROOT / "data" / "audio_library.sqlite"))
-OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
-OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+OLLAMA_API_URL = os.environ.get("OLLAMA_API_URL", "https://ollama.com/api/chat").strip()
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gpt-oss:20b").strip()
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "").strip()
 APP_SESSION_SECRET = os.environ.get("APP_SESSION_SECRET", "").strip()
 
@@ -51,37 +51,45 @@ class AppError(RuntimeError):
         self.help_url = help_url
 
 
-def check_openai_response(response):
+def check_ollama_response(response: requests.Response) -> None:
+    if response.ok:
+        return
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = {}
+    message = ""
+    if isinstance(payload, dict):
+        message = str(payload.get("error") or payload.get("message") or "").strip()
+    detail = f" {message}" if message else ""
+    settings_url = "https://ollama.com/settings"
+    pricing_url = "https://ollama.com/pricing"
+    if response.status_code == 401:
+        raise AppError("Ollama rejected the API key. Check OLLAMA_API_KEY and try again.", 401, settings_url)
+    if response.status_code == 403:
+        raise AppError(
+            f"This Ollama account cannot use the selected model ({OLLAMA_MODEL}). Choose a starter model available to your account or add usage credits.{detail}",
+            403,
+            pricing_url,
+        )
+    if response.status_code == 404:
+        raise AppError(
+            f"Ollama could not find model '{OLLAMA_MODEL}'. Set OLLAMA_MODEL to a model available to your account.{detail}",
+            404,
+            "https://ollama.com/search",
+        )
+    if response.status_code == 429:
+        retry_after = response.headers.get("Retry-After", "").strip()
+        wait = f" Retry after about {retry_after} seconds." if retry_after.isdigit() else ""
+        raise AppError(
+            f"Ollama's free-tier usage, concurrency, or rate limit was reached.{wait}{detail}",
+            429,
+            pricing_url,
+        )
     try:
         response.raise_for_status()
-    except requests.HTTPError:
-        if response.status_code != 429:
-            raise
-        try:
-            payload = response.json()
-            error = payload.get("error", {}) if isinstance(payload, dict) else {}
-            if not isinstance(error, dict):
-                error = {}
-        except ValueError:
-            error = {}
-        code = error.get("code")
-        billing_url = "https://platform.openai.com/settings/organization/billing/"
-        limits_url = "https://platform.openai.com/settings/organization/limits"
-        messages = {
-            "credit_balance_exhausted": "OpenAI API credits are exhausted. Add credits in OpenAI API billing, then try again.",
-            "organization_spend_limit_exceeded": "Your OpenAI organization has reached its spending limit. Review the organization limit before trying again.",
-            "project_spend_limit_exceeded": "Your OpenAI project has reached its spending limit. Review the project's limits in OpenAI settings before trying again.",
-            "organization_usage_limit_exceeded": "Your OpenAI organization has reached its usage limit. Request a higher limit or contact OpenAI support.",
-        }
-        if code in messages:
-            raise AppError(messages[code], 429, billing_url if code == "credit_balance_exhausted" else limits_url) from None
-        if code == "insufficient_quota" or error.get("type") == "insufficient_quota":
-            raise AppError("OpenAI API quota is unavailable. Check your API credit balance and usage limits before trying again.", 429, billing_url) from None
-        if code in {"rate_limit_exceeded", "slow_down"} or error.get("type") == "rate_limit_error":
-            delay = response.headers.get("Retry-After", "")
-            wait = f"Wait at least {delay} seconds" if delay.isdigit() else "Wait briefly"
-            raise AppError(f"OpenAI's temporary request or token rate limit was reached. {wait}, then try again. If this persists, check your API rate limits.", 429, limits_url) from None
-        raise AppError("OpenAI rejected this request with a 429 error. Check your API credits and limits; the response did not identify whether this is a quota or temporary rate limit.", 429, limits_url) from None
+    except requests.HTTPError as exc:
+        raise AppError(f"Ollama request failed with HTTP {response.status_code}.{detail}") from exc
 
 
 def database() -> sqlite3.Connection:
@@ -108,8 +116,9 @@ def database() -> sqlite3.Connection:
         connection.execute("ALTER TABLE generated_playlists ADD COLUMN source_tracks TEXT NOT NULL DEFAULT '[]'")
     connection.execute(
         """
-        CREATE TABLE IF NOT EXISTS openai_usage (
+        CREATE TABLE IF NOT EXISTS model_usage (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            provider TEXT NOT NULL,
             model TEXT NOT NULL,
             input_tokens INTEGER,
             output_tokens INTEGER,
@@ -124,8 +133,10 @@ def database() -> sqlite3.Connection:
 
 def require_configuration() -> None:
     missing = []
-    if not os.environ.get("OPENAI_API_KEY", "").strip():
-        missing.append("OPENAI_API_KEY")
+    if not os.environ.get("OLLAMA_API_KEY", "").strip():
+        missing.append("OLLAMA_API_KEY")
+    if not OLLAMA_MODEL:
+        missing.append("OLLAMA_MODEL")
     if not spotify.CLIENT_ID:
         missing.append("SPOTIFY_CLIENT_ID")
     if missing:
@@ -180,35 +191,48 @@ def logout():
 
 def model_json(instructions: str, prompt: str) -> dict:
     response = requests.post(
-        OPENAI_API_URL,
-        headers={"Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}"},
+        OLLAMA_API_URL,
+        headers={
+            "Authorization": f"Bearer {os.environ['OLLAMA_API_KEY']}",
+            "Content-Type": "application/json",
+        },
         json={
-            "model": OPENAI_MODEL,
-            "temperature": 0.85,
-            "response_format": {"type": "json_object"},
+            "model": OLLAMA_MODEL,
+            "stream": False,
+            "format": "json",
+            "options": {"temperature": 0.85},
             "messages": [
                 {"role": "system", "content": instructions},
                 {"role": "user", "content": prompt},
             ],
         },
-        timeout=90,
+        timeout=120,
     )
-    check_openai_response(response)
+    check_ollama_response(response)
     payload = response.json()
-    usage = payload.get("usage") or {}
-    counts = [usage.get(key) for key in ("prompt_tokens", "completion_tokens", "total_tokens")]
-    if not all(type(value) is int and value >= 0 for value in counts):
-        counts = [None, None, None]
+    input_tokens = payload.get("prompt_eval_count")
+    output_tokens = payload.get("eval_count")
+    counts_valid = all(type(value) is int and value >= 0 for value in (input_tokens, output_tokens))
+    total_tokens = input_tokens + output_tokens if counts_valid else None
+    if not counts_valid:
+        input_tokens = output_tokens = None
     with database() as connection:
         connection.execute(
-            "INSERT INTO openai_usage (model, input_tokens, output_tokens, total_tokens, created_at) VALUES (?, ?, ?, ?, ?)",
-            (payload.get("model") or OPENAI_MODEL, *counts, datetime.now(timezone.utc).isoformat()),
+            "INSERT INTO model_usage (provider, model, input_tokens, output_tokens, total_tokens, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                "ollama",
+                str(payload.get("model") or OLLAMA_MODEL),
+                input_tokens,
+                output_tokens,
+                total_tokens,
+                datetime.now(timezone.utc).isoformat(),
+            ),
         )
-    content = payload["choices"][0]["message"]["content"]
+    content = ((payload.get("message") or {}).get("content") if isinstance(payload, dict) else None)
     try:
         return json.loads(content)
     except (json.JSONDecodeError, TypeError) as exc:
-        raise AppError("The model returned invalid JSON. Please try again.") from exc
+        raise AppError("Ollama returned invalid JSON. Please try again or choose another OLLAMA_MODEL.") from exc
 
 
 def enrich_library_plan(plan: dict, library: Library) -> dict:
@@ -272,12 +296,7 @@ def lastfm_external_candidates(plan: dict, local_candidates: list[dict], exclude
         if not artist or not title or key in seen:
             return
         seen.add(key)
-        record = {
-            "artist": artist,
-            "title": title,
-            "source": "lastfm",
-            "relationship": relationship,
-        }
+        record = {"artist": artist, "title": title, "source": "lastfm", "relationship": relationship}
         if match is not None:
             record["match"] = round(float(match), 4)
         result.append(record)
@@ -358,19 +377,11 @@ def ask_for_hybrid_playlist(prompt: str, excluded_tracks=None) -> dict:
         model_candidates = []
         for row in local_candidates:
             candidate_id = f"local:{row['id']}"
-            candidate_map[candidate_id] = {
-                "artist": row["artist"],
-                "title": row["title"],
-                "source": "local",
-            }
+            candidate_map[candidate_id] = {"artist": row["artist"], "title": row["title"], "source": "local"}
             model_candidates.append({"candidate_id": candidate_id, "source": "local", **row})
         for index, row in enumerate(external_candidates):
             candidate_id = f"lastfm:{index}"
-            candidate_map[candidate_id] = {
-                "artist": row["artist"],
-                "title": row["title"],
-                "source": "lastfm",
-            }
+            candidate_map[candidate_id] = {"artist": row["artist"], "title": row["title"], "source": "lastfm"}
             model_candidates.append({"candidate_id": candidate_id, **row})
 
         exclusion = ""
@@ -466,14 +477,8 @@ def create_from_prompt(prompt: str, excluded_tracks: list[str] | None = None) ->
         cursor = connection.execute(
             "INSERT INTO generated_playlists (prompt, name, description, tracks, spotify_url, created_at, source, source_tracks) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                result["prompt"],
-                result["name"],
-                result["description"],
-                json.dumps(tracks),
-                result["spotify_url"],
-                result["created_at"],
-                result["source"],
-                json.dumps(generated["tracks"]),
+                result["prompt"], result["name"], result["description"], json.dumps(tracks),
+                result["spotify_url"], result["created_at"], result["source"], json.dumps(generated["tracks"]),
             ),
         )
         result["id"] = cursor.lastrowid
@@ -607,7 +612,8 @@ def history():
 def token_usage():
     today = datetime.now(timezone.utc).date().isoformat()
     with database() as connection:
-        totals = dict(connection.execute("""
+        totals = dict(connection.execute(
+            """
             SELECT COUNT(*) AS requests,
                    COALESCE(SUM(input_tokens), 0) AS input_tokens,
                    COALESCE(SUM(output_tokens), 0) AS output_tokens,
@@ -615,10 +621,20 @@ def token_usage():
                    COALESCE(SUM(CASE WHEN created_at >= ? THEN total_tokens ELSE 0 END), 0) AS today_tokens,
                    COUNT(*) - COUNT(total_tokens) AS unreported_requests,
                    MIN(created_at) AS first_recorded_at
-            FROM openai_usage
-        """, (today,)).fetchone())
-        latest = connection.execute("SELECT * FROM openai_usage ORDER BY id DESC LIMIT 1").fetchone()
-    return jsonify(**totals, latest=dict(latest) if latest else None)
+            FROM model_usage
+            WHERE provider = 'ollama'
+            """,
+            (today,),
+        ).fetchone())
+        latest = connection.execute(
+            "SELECT * FROM model_usage WHERE provider = 'ollama' ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+    return jsonify(
+        **totals,
+        provider="ollama",
+        configured_model=OLLAMA_MODEL,
+        latest=dict(latest) if latest else None,
+    )
 
 
 @app.post("/api/generate")
