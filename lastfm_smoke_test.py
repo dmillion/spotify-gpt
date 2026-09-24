@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smoke-test Last.fm API access and print artist/genre-tag data."""
+"""Smoke-test Last.fm artist tags, similar artists, and similar tracks."""
 
 from __future__ import annotations
 
@@ -34,6 +34,7 @@ def main() -> int:
             raw_tags = lastfm.top_tags(artist)[:12]
             filtered_tags = lastfm.filtered_top_tags(artist, min_weight=5, limit=6)
             tracks = lastfm.top_tracks(artist, limit=5)
+            neighbors = lastfm.similar_artists(artist, limit=5)
 
             print("  raw tags:")
             if raw_tags:
@@ -49,17 +50,37 @@ def main() -> int:
             else:
                 print("    - none passed filtering")
 
+            print("  similar artists:")
+            if neighbors:
+                for neighbor in neighbors:
+                    print(f"    - {neighbor['name']} ({neighbor['match']:.3f})")
+            else:
+                print("    - none returned")
+
             print("  top tracks:")
             if tracks:
                 for track in tracks:
                     print(f"    - {track}")
             else:
                 print("    - none returned")
+
+            if tracks:
+                seed_track = tracks[0]
+                similar_tracks = lastfm.similar_tracks(artist, seed_track, limit=5)
+                print(f"  tracks similar to {seed_track}:")
+                if similar_tracks:
+                    for candidate in similar_tracks:
+                        print(
+                            f"    - {candidate['artist']} - {candidate['title']} "
+                            f"({candidate['match']:.3f})"
+                        )
+                else:
+                    print("    - none returned")
     except (requests.RequestException, RuntimeError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
-    print("\nOK: Last.fm artist and tag endpoints are reachable with this API key.")
+    print("\nOK: Last.fm tag and similarity endpoints are reachable with this API key.")
     return 0
 
 
