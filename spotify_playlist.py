@@ -29,7 +29,7 @@ CLIENT_ID = os.environ.get("SPOTIFY_CLIENT_ID", "").strip()
 REDIRECT_URI = os.environ.get(
     "SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8888/callback"
 ).strip()
-SCOPES = "playlist-modify-private playlist-modify-public"
+SCOPES = "playlist-modify-private playlist-modify-public user-library-read"
 
 AUTH_URL = "https://accounts.spotify.com/authorize"
 TOKEN_URL = "https://accounts.spotify.com/api/token"
@@ -52,7 +52,7 @@ class SpotifyError(RuntimeError):
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Create a Spotify playlist from an Artist | Title text file."
+        description="Create Spotify playlists from an Artist | Title text file."
     )
     parser.add_argument(
         "input",
@@ -132,6 +132,14 @@ def _b64url(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode("ascii")
 
 
+def required_scopes() -> set[str]:
+    return set(SCOPES.split())
+
+
+def token_has_required_scopes(token: dict) -> bool:
+    return required_scopes().issubset(set(str(token.get("scope", "")).split()))
+
+
 def save_token(token: dict) -> None:
     token = dict(token)
     token["expires_at"] = int(time.time()) + int(token.get("expires_in", 3600)) - 60
@@ -175,6 +183,7 @@ def refresh_access_token(token: dict) -> dict | None:
     response.raise_for_status()
     refreshed = response.json()
     refreshed.setdefault("refresh_token", token["refresh_token"])
+    refreshed.setdefault("scope", token.get("scope", ""))
     save_token(refreshed)
     return refreshed
 
@@ -277,6 +286,11 @@ def authorize() -> dict:
 
 def get_access_token() -> str:
     token = load_token()
+    if token and not token_has_required_scopes(token):
+        print("Spotify permissions changed; reauthorization is required.")
+        TOKEN_FILE.unlink(missing_ok=True)
+        token = None
+
     if token and token.get("access_token") and token.get("expires_at", 0) > time.time():
         return token["access_token"]
 
@@ -360,6 +374,16 @@ def search_track(token: str, requested: TrackRequest) -> dict | None:
 
     best = max(candidates.values(), key=lambda track: track_score(track, requested))
     return best if track_score(best, requested) >= 0.72 else None
+
+
+def top_artists(token: str, limit: int = 20, time_range: str = "medium_term") -> list[dict]:
+    response = api_request(
+        "GET",
+        "/me/top/artists",
+        token,
+        params={"limit": max(1, min(limit, 50)), "time_range": time_range},
+    )
+    return response.json().get("items", [])
 
 
 def create_playlist(token: str, name: str, description: str, public: bool) -> dict:
