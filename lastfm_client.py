@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Small Last.fm client for artist tags used as genre/theme metadata."""
+"""Small Last.fm client for genre and similarity metadata."""
 
 from __future__ import annotations
 
 import os
 import re
+from functools import lru_cache
 
 import requests
 from dotenv import load_dotenv
@@ -82,7 +83,8 @@ def call(method: str, **params) -> dict:
     return payload
 
 
-def top_tags(artist: str) -> list[tuple[str, int]]:
+@lru_cache(maxsize=512)
+def top_tags(artist: str) -> tuple[tuple[str, int], ...]:
     payload = call("artist.getTopTags", artist=artist)
     raw_tags = payload.get("toptags", {}).get("tag", [])
     tags: list[tuple[str, int]] = []
@@ -94,7 +96,7 @@ def top_tags(artist: str) -> list[tuple[str, int]]:
             count = 0
         if name:
             tags.append((name, count))
-    return tags
+    return tuple(tags)
 
 
 def is_useful_tag(name: str) -> bool:
@@ -124,11 +126,51 @@ def filtered_top_tags(
     return result
 
 
-def top_tracks(artist: str, limit: int = 5) -> list[str]:
-    payload = call("artist.getTopTracks", artist=artist, limit=limit)
+@lru_cache(maxsize=512)
+def similar_artists(artist: str, limit: int = 8) -> tuple[dict, ...]:
+    payload = call("artist.getSimilar", artist=artist, limit=max(1, min(limit, 50)))
+    items = payload.get("similarartists", {}).get("artist", [])
+    result = []
+    for item in items:
+        name = str(item.get("name") or "").strip()
+        try:
+            match = float(item.get("match") or 0)
+        except (TypeError, ValueError):
+            match = 0.0
+        if name:
+            result.append({"name": name, "match": match})
+    return tuple(result)
+
+
+@lru_cache(maxsize=1024)
+def similar_tracks(artist: str, track: str, limit: int = 8) -> tuple[dict, ...]:
+    payload = call(
+        "track.getSimilar",
+        artist=artist,
+        track=track,
+        limit=max(1, min(limit, 50)),
+    )
+    items = payload.get("similartracks", {}).get("track", [])
+    result = []
+    for item in items:
+        title = str(item.get("name") or "").strip()
+        artist_data = item.get("artist") or {}
+        artist_name = str(artist_data.get("name") or "").strip()
+        try:
+            match = float(item.get("match") or 0)
+        except (TypeError, ValueError):
+            match = 0.0
+        if artist_name and title:
+            result.append({"artist": artist_name, "title": title, "match": match})
+    return tuple(result)
+
+
+@lru_cache(maxsize=512)
+def top_tracks(artist: str, limit: int = 5) -> tuple[str, ...]:
+    payload = call("artist.getTopTracks", artist=artist, limit=max(1, min(limit, 50)))
     tracks = payload.get("toptracks", {}).get("track", [])
-    return [
+    return tuple(
         str(track.get("name") or "").strip()
         for track in tracks
         if track.get("name")
-    ]
+    )
