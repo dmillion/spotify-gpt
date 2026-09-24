@@ -382,6 +382,20 @@ def prompt_profile():
             "error": "Spotify authorization needs to be refreshed.",
         }), 409
 
+    local_genres: dict[str, list[str]] = {}
+    try:
+        library = Library(AUDIO_DATABASE)
+        for row in library.rows:
+            artist_name = str(row.get("artist") or "").strip()
+            genre = str(row.get("genre") or "").strip().lower()
+            if not artist_name or not genre:
+                continue
+            bucket = local_genres.setdefault(artist_name.casefold(), [])
+            if genre not in bucket:
+                bucket.append(genre)
+    except (ValueError, sqlite3.Error):
+        pass
+
     try:
         first_page = spotify.api_request(
             "GET", "/me/tracks", token, params={"limit": 1, "offset": 0}
@@ -410,7 +424,7 @@ def prompt_profile():
 
         sampled_artists = list(artist_refs.items())
         random.shuffle(sampled_artists)
-        sampled_artists = sampled_artists[:18]
+        sampled_artists = sampled_artists[:24]
 
         profiles = []
         genre_counts: dict[str, int] = {}
@@ -425,9 +439,16 @@ def prompt_profile():
                 genre = str(raw_genre).strip().lower()
                 if genre and genre not in genres:
                     genres.append(genre)
-                    genre_counts[genre] = genre_counts.get(genre, 0) + 1
-            if name:
-                profiles.append({"name": name, "genres": genres[:6]})
+            for genre in local_genres.get(name.casefold(), []):
+                if genre not in genres:
+                    genres.append(genre)
+            if not name or not genres:
+                continue
+            for genre in genres:
+                genre_counts[genre] = genre_counts.get(genre, 0) + 1
+            profiles.append({"name": name, "genres": genres[:6]})
+            if len(profiles) >= 18:
+                break
 
         genres = [
             genre
