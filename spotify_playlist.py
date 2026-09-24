@@ -151,13 +151,37 @@ def save_token(token: dict) -> None:
         pass
 
 
-def load_token() -> dict | None:
+def _read_token_file() -> dict | None:
     if not TOKEN_FILE.exists():
         return None
     try:
         return json.loads(TOKEN_FILE.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
+
+
+def load_token() -> dict | None:
+    """Load a cached token and silently refresh it when it has expired.
+
+    This never launches interactive OAuth. Background web requests such as prompt
+    suggestions can therefore obtain a valid cached token without blocking the
+    Flask request waiting for browser authorization.
+    """
+    token = _read_token_file()
+    if not token:
+        return None
+    if not token_has_required_scopes(token):
+        return token
+    if token.get("access_token") and token.get("expires_at", 0) > time.time():
+        return token
+    if token.get("refresh_token"):
+        try:
+            refreshed = refresh_access_token(token)
+            if refreshed:
+                return refreshed
+        except requests.RequestException:
+            pass
+    return token
 
 
 def refresh_access_token(token: dict) -> dict | None:
