@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Mixtape Foundry — Access</title>
+  <title>Tone Raider — Access</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap');
     :root { --ink:#20251f; --muted:#667069; --paper:#f3efe6; --acid:#c8e66a; --red:#e3644b; }
@@ -26,7 +26,7 @@
 <body>
 <main class="login-main">
   {% include '_theme_picker.html' %}
-  <div class="eyebrow">Mixtape Foundry / private preview</div>
+  <div class="eyebrow">Tone Raider / private preview</div>
   <h1>Enter the<br>listening room.</h1>
   <form method="post" action="{{ url_for('login') }}">
     {% if error %}<p class="error">{{ error }}</p>{% endif %}
