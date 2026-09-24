@@ -29,7 +29,7 @@ CLIENT_ID = os.environ.get("SPOTIFY_CLIENT_ID", "").strip()
 REDIRECT_URI = os.environ.get(
     "SPOTIFY_REDIRECT_URI", "http://127.0.0.1:8888/callback"
 ).strip()
-SCOPES = "playlist-modify-private playlist-modify-public user-top-read"
+SCOPES = "playlist-modify-private playlist-modify-public user-library-read"
 
 AUTH_URL = "https://accounts.spotify.com/authorize"
 TOKEN_URL = "https://accounts.spotify.com/api/token"
