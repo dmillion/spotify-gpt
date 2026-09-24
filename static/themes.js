@@ -208,7 +208,7 @@
       }
       .composer-actions .generate:hover,
       .composer-actions .idea-button:hover {
-        transform:translateY(-1px);
+        transform:translateY(-3px);
       }
       .idea-button:disabled { cursor:wait; opacity:.65; }
       html:is([data-theme='deep-space'],[data-theme='amber']) .composer-actions .idea-button {

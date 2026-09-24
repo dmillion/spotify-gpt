@@ -189,7 +189,7 @@ html:is([data-theme='deep-space'],[data-theme='amber']) .source-control { justif
 html:is([data-theme='deep-space'],[data-theme='amber']) .prompt-label { font-size:13px; color:var(--muted); margin-top:24px; }
 html:is([data-theme='deep-space'],[data-theme='amber']) .composer { grid-template-columns:1fr; border:0; border-top:2px solid var(--acid); background:var(--surface); }
 html:is([data-theme='deep-space'],[data-theme='amber']) textarea { min-height:190px; padding:24px; font-size:22px; line-height:1.5; }
-html:is([data-theme='deep-space'],[data-theme='amber']) .generate { justify-self:end; min-width:190px; margin:0 18px 18px; padding:14px 20px; border:0; }
+html:is([data-theme='deep-space'],[data-theme='amber']) .generate { justify-self:end; min-width:190px; padding:14px 20px; border:0; }
 html:is([data-theme='deep-space'],[data-theme='amber']) .generate br { display:none; }
 html:is([data-theme='deep-space'],[data-theme='amber']) .generate br::after { content:' '; }
 html:is([data-theme='deep-space'],[data-theme='amber']) #library-info { margin:16px 0 0; font-size:11px; }
