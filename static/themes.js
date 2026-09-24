@@ -162,35 +162,87 @@
 
     const style = document.createElement('style');
     style.textContent = `
-      .composer { position:relative; grid-template-columns:1fr 180px; }
-      .composer-actions { display:grid; grid-template-rows:1fr 1fr; border-left:2px solid var(--ink); }
-      .composer-actions .generate { border-left:0; border-bottom:1px solid var(--ink); }
-      .idea-button { background:var(--acid); color:var(--ink); padding:16px; }
-      .idea-button:hover { filter:brightness(.94); }
+      .composer {
+        position:relative;
+        display:block;
+        min-height:168px;
+      }
+      .composer textarea {
+        display:block;
+        min-height:164px;
+        padding-right:52px;
+      }
+      .composer-actions {
+        display:flex;
+        justify-content:flex-end;
+        align-items:stretch;
+        gap:12px;
+        margin-top:14px;
+      }
+      .composer-actions .generate,
+      .composer-actions .idea-button {
+        min-height:52px;
+        padding:13px 22px;
+        border:1px solid var(--ink);
+        font-size:14px;
+      }
+      .composer-actions .generate {
+        min-width:190px;
+        border-left:1px solid var(--ink);
+      }
+      .idea-button {
+        min-width:160px;
+        background:transparent;
+        color:var(--ink);
+      }
+      .idea-button:hover { background:var(--acid); }
       .idea-button:disabled { cursor:wait; opacity:.65; }
-      .prompt-clear { position:absolute; z-index:3; top:9px; right:190px; width:30px; height:30px; padding:0; border:1px solid var(--line); background:#fffdf8; color:var(--muted); font:500 18px/1 'DM Mono',monospace; }
-      .prompt-clear:hover { color:var(--ink); border-color:var(--ink); }
-      .composer:has(textarea:placeholder-shown) .prompt-clear { opacity:0; pointer-events:none; }
-      textarea { padding-right:48px; }
+      .prompt-clear {
+        position:absolute;
+        z-index:3;
+        top:10px;
+        right:10px;
+        width:30px;
+        height:30px;
+        padding:0;
+        border:1px solid var(--line);
+        background:transparent;
+        color:var(--muted);
+        font:500 18px/1 'DM Mono',monospace;
+      }
+      .prompt-clear:hover {
+        color:var(--ink);
+        border-color:var(--ink);
+        background:var(--acid);
+      }
+      .composer:has(textarea:placeholder-shown) .prompt-clear {
+        opacity:0;
+        pointer-events:none;
+      }
       @media (max-width:700px) {
-        .composer { grid-template-columns:1fr; }
-        .composer-actions { grid-template-columns:1fr 1fr; grid-template-rows:1fr; border-left:0; border-top:2px solid var(--ink); }
-        .composer-actions .generate { border:0; border-right:1px solid var(--ink); border-bottom:0; }
-        .prompt-clear { right:9px; }
+        .composer-actions {
+          justify-content:stretch;
+          gap:8px;
+        }
+        .composer-actions .generate,
+        .composer-actions .idea-button {
+          flex:1 1 0;
+          min-width:0;
+        }
       }
     `;
     document.head.appendChild(style);
 
     const actions = document.createElement('div');
     actions.className = 'composer-actions';
-    composer.insertBefore(actions, generateButton);
+    composer.insertAdjacentElement('afterend', actions);
     actions.appendChild(generateButton);
 
     const ideaButton = document.createElement('button');
     ideaButton.type = 'button';
     ideaButton.className = 'idea-button';
     ideaButton.textContent = 'Give Me Ideas';
-    actions.appendChild(ideaButton);
+    actions.insertBefore(ideaButton, generateButton);
 
     const clearButton = document.createElement('button');
     clearButton.type = 'button';
