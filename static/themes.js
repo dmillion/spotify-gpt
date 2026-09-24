@@ -153,8 +153,10 @@
       const items = await response.json();
       articles.forEach((article, index) => {
         const item = items[index];
+        if (!item) return;
+        article.dataset.regeneratePrompt = String(item.prompt || '');
         const tracks = article.querySelector('.tracks');
-        if (!tracks || !item || !Array.isArray(item.tracks) || item.tracks.length <= 12 || tracks.dataset.expandable === 'true') return;
+        if (!tracks || !Array.isArray(item.tracks) || item.tracks.length <= 12 || tracks.dataset.expandable === 'true') return;
         const marker = Array.from(tracks.querySelectorAll('.track')).find(element => /^\+\d+ more$/i.test(element.textContent.trim()));
         if (!marker) return;
 
@@ -295,6 +297,17 @@
     }
 
     if (history) {
+      history.addEventListener('click', event => {
+        const regenerateButton = event.target.closest('.regen');
+        if (!regenerateButton) return;
+        const article = regenerateButton.closest('.playlist');
+        const eyebrow = article?.querySelector('.eyebrow')?.textContent || '';
+        const fallbackPrompt = eyebrow.replace(/^(Hybrid|MP3 library|Discovery) \/ /, '');
+        const savedPrompt = article?.dataset.regeneratePrompt || fallbackPrompt;
+        if (!savedPrompt) return;
+        promptBox.value = savedPrompt;
+        promptBox.dispatchEvent(new Event('input', {bubbles: true}));
+      }, true);
       new MutationObserver(() => enhanceHistoryTracks()).observe(history, {childList: true});
       enhanceHistoryTracks();
     }
