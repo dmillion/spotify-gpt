@@ -91,8 +91,8 @@
   const escapeHtml = value => String(value).replace(/[&<>'"]/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[character]));
   const dateLabel = value => new Date(value).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'});
   const sample = items => items.length ? items[Math.floor(Math.random() * items.length)] : '';
-  let promptIdeas = [];
-  let lastPromptIdea = '';
+  let promptProfiles = [];
+  let lastPromptArtist = '';
 
   function genreTheme(genres) {
     const text = genres.join(' ').toLowerCase();
@@ -174,37 +174,24 @@
     );
   }
 
-  function buildPromptIdeas(profile) {
-    const profiles = Array.isArray(profile.profiles) ? profile.profiles : [];
-    if (!profiles.length) return [];
-    const ideas = [];
-    for (let i = 0; i < 24; i += 1) {
-      const artist = sample(profiles);
-      const genres = Array.isArray(artist.genres) ? artist.genres : [];
-      const primaryGenre = sample(genres);
-      const theme = genreTheme(genres);
-      const scene = sample(theme.scenes);
-      const quality = sample(theme.qualities);
-      const constraint = sample(theme.constraints);
-      if (primaryGenre && i % 2 === 0) {
-        ideas.push(`Start with ${artist.name}'s ${primaryGenre} side and build toward ${scene}; ${quality}, ${constraint}...`);
-      } else if (primaryGenre) {
-        ideas.push(`Build a ${primaryGenre} playlist around ${artist.name}: ${quality}; ${constraint}...`);
-      } else {
-        ideas.push(`Use ${artist.name} as the anchor and stay close to adjacent artists and deep cuts; make the transitions feel intentional...`);
-      }
-    }
-    return [...new Set(ideas)];
+  function buildPromptIdea(artist) {
+    const genres = Array.isArray(artist.genres) ? artist.genres : [];
+    const primaryGenre = sample(genres);
+    const theme = genreTheme(genres);
+    const scene = sample(theme.scenes);
+    const quality = sample(theme.qualities);
+    const constraint = sample(theme.constraints);
+    return Math.random() < 0.5
+      ? `Start with ${artist.name}'s ${primaryGenre} side and build toward ${scene}; ${quality}, ${constraint}...`
+      : `Build a ${primaryGenre} playlist around ${artist.name}: ${quality}; ${constraint}...`;
   }
 
   function rotatePromptPlaceholder() {
-    if (promptBox.value || !promptIdeas.length) return;
-    let next = sample(promptIdeas);
-    if (promptIdeas.length > 1) {
-      while (next === lastPromptIdea) next = sample(promptIdeas);
-    }
-    lastPromptIdea = next;
-    promptBox.placeholder = next;
+    if (promptBox.value || !promptProfiles.length) return;
+    const alternatives = promptProfiles.filter(artist => artist.name !== lastPromptArtist);
+    const artist = sample(alternatives.length ? alternatives : promptProfiles);
+    lastPromptArtist = artist.name;
+    promptBox.placeholder = buildPromptIdea(artist);
   }
 
   async function loadPromptIdeas() {
@@ -212,9 +199,11 @@
       const response = await fetch('/api/prompt-profile', {cache:'no-store'});
       if (!response.ok) return;
       const profile = await response.json();
-      const personalized = buildPromptIdeas(profile);
+      const personalized = Array.isArray(profile.profiles)
+        ? profile.profiles.filter(artist => artist?.name && Array.isArray(artist.genres) && artist.genres.length)
+        : [];
       if (personalized.length) {
-        promptIdeas = personalized;
+        promptProfiles = personalized;
         rotatePromptPlaceholder();
       }
     } catch (_) {
