@@ -90,6 +90,76 @@
   const count = document.querySelector('#count');
   const escapeHtml = value => String(value).replace(/[&<>'"]/g, character => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#039;','"':'&quot;'}[character]));
   const dateLabel = value => new Date(value).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'});
+  const sample = items => items.length ? items[Math.floor(Math.random() * items.length)] : '';
+  let promptIdeas = [];
+  let lastPromptIdea = '';
+
+  function buildPromptIdeas(profile) {
+    const genres = Array.isArray(profile.genres) ? profile.genres : [];
+    const artists = Array.isArray(profile.artists) ? profile.artists : [];
+    const scenes = [
+      'a rain-soaked late-night drive', 'a grimy basement show', 'a desert highway after midnight',
+      'a smoky bar at closing time', 'a neon-lit city drive', 'a summer back-road cruise',
+      'an anxious 2 a.m. comedown', 'a Sunday morning that gets progressively heavier',
+      'a warehouse set with the lights almost off', 'a cold-weather walk with nowhere to be'
+    ];
+    const qualities = [
+      'heavy but still melodic', 'groove-forward and dirty', 'fuzzy and bass-heavy',
+      'dark, rhythmic, and hooky', 'raw without turning shapeless', 'weird but still catchy',
+      'fast without becoming frantic', 'slow and massive without becoming sleepy',
+      'tense, noisy, and full of momentum', 'warm, blown-out, and a little psychedelic'
+    ];
+    const constraints = [
+      'no obvious picks', 'lean into deep cuts', 'keep the momentum up', 'avoid anything too polished',
+      'favor big riffs and strong hooks', 'let it get stranger as it goes', 'keep the low end huge',
+      'avoid long ambient detours', 'make the transitions feel intentional', 'stay rough around the edges'
+    ];
+    const ideas = [];
+    for (let i = 0; i < 18; i += 1) {
+      const genreA = sample(genres);
+      const genreB = sample(genres.filter(genre => genre !== genreA));
+      const artist = sample(artists);
+      const scene = sample(scenes);
+      const quality = sample(qualities);
+      const constraint = sample(constraints);
+      if (genreA && genreB && i % 3 === 0) {
+        ideas.push(`${scene} through ${genreA} and ${genreB}; ${quality}, ${constraint}...`);
+      } else if (artist && genreA && i % 3 === 1) {
+        ideas.push(`Start near ${artist}, drift into ${genreA}, and build ${scene}; ${constraint}...`);
+      } else if (genreA) {
+        ideas.push(`${genreA} for ${scene}, ${quality}; ${constraint}...`);
+      } else if (artist) {
+        ideas.push(`Use ${artist} as a loose starting point for ${scene}; ${quality}, ${constraint}...`);
+      }
+    }
+    return [...new Set(ideas)];
+  }
+
+  function rotatePromptPlaceholder() {
+    if (promptBox.value || !promptIdeas.length) return;
+    let next = sample(promptIdeas);
+    if (promptIdeas.length > 1) {
+      while (next === lastPromptIdea) next = sample(promptIdeas);
+    }
+    lastPromptIdea = next;
+    promptBox.placeholder = next;
+  }
+
+  async function loadPromptIdeas() {
+    try {
+      const response = await fetch('/api/prompt-profile', {cache:'no-store'});
+      if (!response.ok) return;
+      const profile = await response.json();
+      const personalized = buildPromptIdeas(profile);
+      if (personalized.length) {
+        promptIdeas = personalized;
+        rotatePromptPlaceholder();
+      }
+    } catch (_) {
+      // Keep the static fallback placeholder if Spotify profile data is unavailable.
+    }
+  }
+
   function render(items) {
     count.textContent = `${items.length} saved`;
     if (!items.length) { history.innerHTML = '<div class="empty">No playlists yet. Give the machine a mood.</div>'; return; }
@@ -118,7 +188,7 @@
     if (button.disabled) return;
     document.querySelector('#error-help').hidden = true;
     button.disabled = true; status.textContent = 'CURATING / RESOLVING / PRESSING...';
-    try { const response = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); const data = await response.json(); if (!response.ok) { if (['https://platform.openai.com/settings/organization/billing/', 'https://platform.openai.com/settings/organization/limits'].includes(data.help_url)) { const link = document.querySelector('#error-help-link'); link.href = data.help_url; link.textContent = data.help_url.includes('/billing/') ? 'Open OpenAI API billing ↗' : 'Open OpenAI API limits ↗'; document.querySelector('#error-help').hidden = false; } throw new Error(data.error || 'Something went wrong.'); } status.textContent = `Built “${data.name}” with ${data.tracks.length} resolved tracks.${data.missing?.length ? ` ${data.missing.length} unavailable on Spotify: ${data.missing.join('; ')}` : ''}`; promptBox.value = ''; await loadHistory(); }
+    try { const response = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); const data = await response.json(); if (!response.ok) { if (['https://platform.openai.com/settings/organization/billing/', 'https://platform.openai.com/settings/organization/limits'].includes(data.help_url)) { const link = document.querySelector('#error-help-link'); link.href = data.help_url; link.textContent = data.help_url.includes('/billing/') ? 'Open OpenAI API billing ↗' : 'Open OpenAI API limits ↗'; document.querySelector('#error-help').hidden = false; } throw new Error(data.error || 'Something went wrong.'); } status.textContent = `Built “${data.name}” with ${data.tracks.length} resolved tracks.${data.missing?.length ? ` ${data.missing.length} unavailable on Spotify: ${data.missing.join('; ')}` : ''}`; promptBox.value = ''; rotatePromptPlaceholder(); await loadHistory(); }
     catch (error) { status.textContent = error.message; } finally { button.disabled = false; await loadUsage(); }
   }
   button.addEventListener('click', () => submit('/api/generate', {prompt:promptBox.value, source:document.querySelector('#source').value}));
@@ -131,7 +201,9 @@
   }).catch(() => { document.querySelector('#library-info').textContent = 'Could not check the MP3 index.'; });
   loadHistory();
   loadUsage();
+  loadPromptIdeas();
   setInterval(() => { if (!document.hidden) loadUsage(); }, 10000);
+  setInterval(() => { if (!document.hidden) rotatePromptPlaceholder(); }, 9000);
 </script>
 </body>
 </html>
