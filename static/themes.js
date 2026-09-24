@@ -1,20 +1,23 @@
-/* Apply before first paint; theme choice never reloads or resets the playlist form. */
+/* Apply theme before first paint; switching never reloads or resets the playlist form. */
 (() => {
-  const key = 'mixtape-foundry-theme';
-  const themes = ['foundry', 'deep-space', 'amber'];
+  const key = 'bitraider-theme';
+  const legacyKey = 'mixtape-foundry-theme';
+  const themes = ['deep-space', 'amber'];
   const defaultPromptPlaceholder = 'Pick an artist or sound and describe where you want it to go...';
   let selected = 'deep-space';
   let ideaProfiles = [];
   let lastIdeaArtist = '';
 
   try {
-    const saved = localStorage.getItem(key);
+    const saved = localStorage.getItem(key) || localStorage.getItem(legacyKey);
     if (themes.includes(saved)) selected = saved;
-  } catch { /* Themes still work when browser storage is unavailable. */ }
+    localStorage.setItem(key, selected);
+    localStorage.removeItem(legacyKey);
+  } catch { /* Theme switching still works when browser storage is unavailable. */ }
   document.documentElement.dataset.theme = selected;
 
-  // The legacy prompt UI schedules automatic idea rotation every 9 seconds.
-  // Suppress only that timer; usage polling and all other intervals continue normally.
+  // The legacy inline prompt code still schedules a 9-second placeholder rotation.
+  // Suppress only that obsolete timer; usage polling continues normally.
   const nativeSetInterval = window.setInterval.bind(window);
   window.setInterval = (callback, delay, ...args) => {
     if (delay === 9000) return 0;
@@ -118,8 +121,8 @@
   async function ensureIdeaProfiles() {
     if (ideaProfiles.length) return ideaProfiles;
     const response = await fetch('/api/prompt-profile', {cache: 'no-store'});
-    if (!response.ok) throw new Error('Could not load playlist ideas.');
-    const profile = await response.json();
+    const profile = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(profile.error || 'Could not load playlist ideas.');
     ideaProfiles = Array.isArray(profile.profiles)
       ? profile.profiles.filter(artist => artist?.name && Array.isArray(artist.genres) && artist.genres.length)
       : [];
@@ -155,113 +158,8 @@
     const generateButton = document.querySelector('#generate');
     if (!promptBox || !composer || !generateButton) return;
 
-    // Stop the older placeholder functions from changing the default text after load
-    // or after a playlist is submitted.
     window.rotatePromptPlaceholder = () => {};
     promptBox.placeholder = defaultPromptPlaceholder;
-
-    const style = document.createElement('style');
-    style.textContent = `
-      .composer {
-        position:relative;
-        display:block;
-        min-height:168px;
-      }
-      .composer textarea {
-        display:block;
-        min-height:164px;
-        padding-right:52px;
-      }
-      .composer-actions {
-        display:flex;
-        justify-content:flex-end;
-        align-items:stretch;
-        gap:12px;
-        margin-top:14px;
-      }
-      .composer-actions .generate,
-      .composer-actions .idea-button {
-        min-height:52px;
-        padding:13px 22px;
-        border:1px solid var(--ink);
-        font-size:14px;
-        transition:
-          background-color 150ms ease-out,
-          color 150ms ease-out,
-          border-color 150ms ease-out,
-          box-shadow 180ms ease-out,
-          transform 150ms ease-out;
-      }
-      .composer-actions .generate {
-        min-width:190px;
-        border-left:1px solid var(--ink);
-      }
-      .idea-button {
-        min-width:190px;
-        background:var(--control);
-        color:var(--ink);
-        font:600 14px/1.35 'Space Grotesk',sans-serif;
-      }
-      .idea-button:hover {
-        background:var(--acid);
-        color:var(--button-ink);
-      }
-      .composer-actions .generate:hover,
-      .composer-actions .idea-button:hover {
-        transform:translateY(-3px);
-      }
-      .idea-button:disabled { cursor:wait; opacity:.65; }
-      html:is([data-theme='deep-space'],[data-theme='amber']) .composer-actions .idea-button {
-        color:var(--acid);
-        background:var(--control);
-        border-color:var(--line-strong);
-        font:500 15px/1.6 'DM Mono',monospace;
-      }
-      html:is([data-theme='deep-space'],[data-theme='amber']) .composer-actions .idea-button:hover {
-        color:var(--button-ink);
-        background:var(--acid);
-        border-color:var(--acid);
-        box-shadow:0 0 16px var(--glow), inset 0 0 0 1px var(--acid);
-      }
-      html:is([data-theme='deep-space'],[data-theme='amber']) .composer-actions .generate:hover {
-        color:var(--button-ink);
-        box-shadow:0 0 16px var(--glow);
-      }
-      .prompt-clear {
-        position:absolute;
-        z-index:3;
-        top:10px;
-        right:10px;
-        width:30px;
-        height:30px;
-        padding:0;
-        border:1px solid var(--line);
-        background:transparent;
-        color:var(--muted);
-        font:500 18px/1 'DM Mono',monospace;
-      }
-      .prompt-clear:hover {
-        color:var(--ink);
-        border-color:var(--ink);
-        background:var(--acid);
-      }
-      .composer:has(textarea:placeholder-shown) .prompt-clear {
-        opacity:0;
-        pointer-events:none;
-      }
-      @media (max-width:700px) {
-        .composer-actions {
-          justify-content:stretch;
-          gap:8px;
-        }
-        .composer-actions .generate,
-        .composer-actions .idea-button {
-          flex:1 1 0;
-          min-width:0;
-        }
-      }
-    `;
-    document.head.appendChild(style);
 
     const actions = document.createElement('div');
     actions.className = 'composer-actions';
