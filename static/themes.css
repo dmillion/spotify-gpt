@@ -40,8 +40,16 @@ html[data-theme='amber'] {
   --crt-glow:rgba(255,208,138,.22);
 }
 
-html { color-scheme:dark; }
-body { line-height:1.5; background:radial-gradient(ellipse at 50% 0%,var(--glow),transparent 60%),var(--paper); }
+html {
+  min-height:100%;
+  color-scheme:dark;
+  background:radial-gradient(ellipse at 50% 0%,var(--glow),transparent 60%),var(--paper);
+}
+body {
+  min-height:100vh;
+  line-height:1.5;
+  background:transparent;
+}
 body:before {
   position:absolute;
   height:460px;
