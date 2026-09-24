@@ -361,8 +361,28 @@ def library_status():
 def prompt_profile():
     if not spotify.CLIENT_ID:
         return jsonify({"artists": [], "genres": [], "profiles": [], "error": "Spotify is not configured."}), 503
+
+    token_info = spotify.load_token()
+    if not token_info or not spotify.token_has_required_scopes(token_info):
+        return jsonify({
+            "artists": [],
+            "genres": [],
+            "profiles": [],
+            "reauthorize": True,
+            "error": "Spotify authorization needs the Liked Songs permission.",
+        }), 409
+
+    token = str(token_info.get("access_token") or "").strip()
+    if not token:
+        return jsonify({
+            "artists": [],
+            "genres": [],
+            "profiles": [],
+            "reauthorize": True,
+            "error": "Spotify authorization needs to be refreshed.",
+        }), 409
+
     try:
-        token = spotify.get_access_token()
         first_page = spotify.api_request(
             "GET", "/me/tracks", token, params={"limit": 1, "offset": 0}
         ).json()
