@@ -7,6 +7,8 @@ from pathlib import Path
 
 import numpy as np
 
+import lastfm_client as lastfm
+
 AXES = {
     'bass_weight': 'low_energy_ratio',
     'low_mid_weight': 'low_mid_energy_ratio',
@@ -62,6 +64,45 @@ class Library:
             'axes': list(AXES),
         }
 
+    def enrich_plan_with_lastfm(self, artists, terms):
+        """Supplement retrieval seeds with Last.fm neighbors and strong tags.
+
+        Last.fm only broadens retrieval. The final candidate set still consists solely
+        of tracks actually present in this local library, scored with local metadata
+        and measured sound features.
+        """
+        if not lastfm.API_KEY or not artists:
+            return artists, terms
+
+        local_artists = {row['artist'].casefold(): row['artist'] for row in self.rows}
+        expanded_artists = set(artists)
+        expanded_terms = list(terms)
+        seen_terms = {term.casefold() for term in terms}
+
+        # Keep external calls bounded. The model's first few artist seeds carry the
+        # strongest intent signal; each seed contributes only close Last.fm neighbors.
+        for seed in list(artists)[:4]:
+            canonical_seed = local_artists.get(seed)
+            query_name = canonical_seed or seed
+            try:
+                for tag in lastfm.filtered_top_tags(query_name, min_weight=10, limit=4):
+                    name = tag['name']
+                    if name.casefold() not in seen_terms:
+                        expanded_terms.append(name)
+                        seen_terms.add(name.casefold())
+                for related in lastfm.similar_artists(query_name, limit=8):
+                    if related.get('match', 0) < 0.15:
+                        continue
+                    local_name = local_artists.get(str(related.get('name') or '').casefold())
+                    if local_name:
+                        expanded_artists.add(local_name.casefold())
+            except Exception:
+                # Last.fm is supplemental; retrieval must remain usable if it is down
+                # or an artist is absent from its catalog.
+                continue
+
+        return expanded_artists, expanded_terms
+
     def candidates(self, plan, excluded=(), limit=240):
         if not isinstance(plan, dict):
             raise ValueError('The library search plan was invalid. Please try again.')
@@ -72,6 +113,7 @@ class Library:
             raise ValueError('The library search plan was invalid. Please try again.')
         artists = {s.casefold() for s in artists if isinstance(s, str)}
         terms = [s.casefold() for s in terms if isinstance(s, str) and s.strip()]
+        artists, terms = self.enrich_plan_with_lastfm(artists, terms)
         targets = {k: float(v) for k, v in targets.items() if k in AXES and self.valid(v) and 0 <= v <= 100}
         excluded = {s.strip().casefold() for s in excluded}
         ranked = []
