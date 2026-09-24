@@ -1,20 +1,24 @@
-/* Apply theme before first paint; switching never reloads or resets the playlist form. */
+/* Apply theme/filter before first paint; switching never reloads or resets the playlist form. */
 (() => {
   const key = 'bitraider-theme';
+  const crtKey = 'bitraider-crt';
   const legacyKey = 'mixtape-foundry-theme';
   const themes = ['deep-space', 'amber'];
   const defaultPromptPlaceholder = 'Pick an artist or sound and describe where you want it to go...';
   let selected = 'deep-space';
+  let crtEnabled = false;
   let ideaProfiles = [];
   let lastIdeaArtist = '';
 
   try {
     const saved = localStorage.getItem(key) || localStorage.getItem(legacyKey);
     if (themes.includes(saved)) selected = saved;
+    crtEnabled = localStorage.getItem(crtKey) === 'on';
     localStorage.setItem(key, selected);
     localStorage.removeItem(legacyKey);
-  } catch { /* Theme switching still works when browser storage is unavailable. */ }
+  } catch { /* Theme/filter switching still works when browser storage is unavailable. */ }
   document.documentElement.dataset.theme = selected;
+  document.documentElement.dataset.crt = crtEnabled ? 'on' : 'off';
 
   // The legacy inline prompt code still schedules a 9-second placeholder rotation.
   // Suppress only that obsolete timer; usage polling continues normally.
@@ -132,26 +136,49 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     const picker = document.querySelector('#theme-select');
+    const crtToggle = document.querySelector('#crt-toggle');
+    const feedback = document.querySelector('#theme-feedback');
+
     if (picker) {
       picker.value = selected;
       picker.addEventListener('change', () => {
         if (!themes.includes(picker.value)) return;
         document.documentElement.dataset.theme = picker.value;
-        const feedback = document.querySelector('#theme-feedback');
         try {
           localStorage.setItem(key, picker.value);
-          feedback.textContent = `${picker.selectedOptions[0].textContent} theme selected and saved.`;
+          if (feedback) feedback.textContent = `${picker.selectedOptions[0].textContent} theme selected and saved.`;
         } catch {
-          feedback.textContent = `${picker.selectedOptions[0].textContent} theme selected for this page. Your browser could not save the preference.`;
+          if (feedback) feedback.textContent = `${picker.selectedOptions[0].textContent} theme selected for this page. Your browser could not save the preference.`;
         }
       });
-      window.addEventListener('storage', event => {
-        if (event.key !== key) return;
-        const theme = themes.includes(event.newValue) ? event.newValue : 'deep-space';
-        document.documentElement.dataset.theme = theme;
-        picker.value = theme;
+    }
+
+    if (crtToggle) {
+      crtToggle.checked = crtEnabled;
+      crtToggle.addEventListener('change', () => {
+        crtEnabled = crtToggle.checked;
+        document.documentElement.dataset.crt = crtEnabled ? 'on' : 'off';
+        try {
+          localStorage.setItem(crtKey, crtEnabled ? 'on' : 'off');
+          if (feedback) feedback.textContent = `CRT filter ${crtEnabled ? 'enabled' : 'disabled'} and saved.`;
+        } catch {
+          if (feedback) feedback.textContent = `CRT filter ${crtEnabled ? 'enabled' : 'disabled'} for this page.`;
+        }
       });
     }
+
+    window.addEventListener('storage', event => {
+      if (event.key === key) {
+        const theme = themes.includes(event.newValue) ? event.newValue : 'deep-space';
+        document.documentElement.dataset.theme = theme;
+        if (picker) picker.value = theme;
+      }
+      if (event.key === crtKey) {
+        crtEnabled = event.newValue === 'on';
+        document.documentElement.dataset.crt = crtEnabled ? 'on' : 'off';
+        if (crtToggle) crtToggle.checked = crtEnabled;
+      }
+    });
 
     const promptBox = document.querySelector('#prompt');
     const composer = document.querySelector('.composer');
