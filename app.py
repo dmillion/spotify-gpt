@@ -27,6 +27,7 @@ DATABASE = Path(os.environ.get("PLAYLIST_HISTORY_DB", ROOT / "data" / "playlist_
 AUDIO_DATABASE = Path(os.environ.get("AUDIO_LIBRARY_DB", ROOT / "data" / "audio_library.sqlite"))
 OLLAMA_API_URL = os.environ.get("OLLAMA_API_URL", "https://ollama.com/api/chat").strip()
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gpt-oss:20b").strip()
+OLLAMA_TIMEOUT = max(1, int(os.environ.get("OLLAMA_TIMEOUT", "300")))
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "").strip()
 APP_SESSION_SECRET = os.environ.get("APP_SESSION_SECRET", "").strip()
 
@@ -265,7 +266,7 @@ def model_json(instructions: str, prompt: str, schema: dict) -> dict:
                 {"role": "user", "content": prompt},
             ],
         },
-        timeout=120,
+        timeout=OLLAMA_TIMEOUT,
     )
     check_ollama_response(response)
     payload = response.json()
