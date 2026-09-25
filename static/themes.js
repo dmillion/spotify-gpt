@@ -256,7 +256,7 @@
     if (usageTitle) usageTitle.textContent = 'Ollama usage';
     const usageNotes = document.querySelectorAll('.usage-details .usage-note');
     if (usageNotes.length > 1) {
-      usageNotes[1].textContent = 'Tone Raider token counts reported by Ollama only. This meter does not represent your account-wide remaining free starter credits; check Ollama for that balance.';
+      usageNotes[1].textContent = 'Tune Raider token counts reported by Ollama only. This meter does not represent your account-wide remaining free starter credits; check Ollama for that balance.';
     }
     const errorHelpLink = document.querySelector('#error-help-link');
     if (errorHelpLink) errorHelpLink.textContent = 'Open Ollama settings ↗';
@@ -320,7 +320,7 @@
     const ideaButton = document.createElement('button');
     ideaButton.type = 'button';
     ideaButton.className = 'idea-button';
-    ideaButton.textContent = 'Tone It Up!';
+    ideaButton.textContent = 'Tune It Up!';
     actions.insertBefore(ideaButton, generateButton);
 
     const clearButton = document.createElement('button');
@@ -359,7 +359,7 @@
 
     ideaButton.addEventListener('click', async () => {
       ideaButton.disabled = true;
-      ideaButton.innerHTML = `${loadingIcon()} <span>Fine Toning…</span>`;
+      ideaButton.innerHTML = `${loadingIcon()} <span>Fine Tuning…</span>`;
       try {
         const profiles = await fetchIdeaProfiles();
         const alternatives = profiles.filter(artist => artist.name !== lastIdeaArtist);
@@ -371,7 +371,7 @@
       } catch (error) {
         if (status) status.textContent = error.message;
       } finally {
-        ideaButton.textContent = 'Tone It Up!';
+        ideaButton.textContent = 'Tune It Up!';
         ideaButton.disabled = false;
       }
     });

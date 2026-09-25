@@ -12,7 +12,7 @@ else
   PYTHON="$(command -v python)"
 fi
 
-echo "Stopping existing Tone Raider app processes..."
+echo "Stopping existing Tune Raider app processes..."
 
 # Kill only app.py processes whose working directory is this repository.
 # This avoids touching unrelated Python apps elsewhere on the machine.
@@ -47,7 +47,7 @@ while read -r pid; do
 done < <(pgrep -f 'app\.py' || true)
 
 echo
-echo "Tone Raider configuration:"
+echo "Tune Raider configuration:"
 "$PYTHON" - <<'PY'
 import os
 from pathlib import Path

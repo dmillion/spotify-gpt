@@ -297,7 +297,7 @@ def model_json(instructions: str, prompt: str, schema: dict, *, stage: str = "re
         print(f"[Ollama] {stage} timed out after {elapsed:.1f}s", flush=True)
         raise AppError(
             f"Ollama timed out during {stage} after {elapsed:.0f} seconds. "
-            "The model may still be running, but Tone Raider stopped waiting for the response."
+            "The model may still be running, but Tune Raider stopped waiting for the response."
         ) from exc
     elapsed = time.monotonic() - started
     check_ollama_response(response)
@@ -517,7 +517,7 @@ def ask_for_hybrid_playlist(prompt: str, excluded_tracks=None) -> dict:
             model_candidates.append({"candidate_id": candidate_id, **row})
 
         print(
-            f"[Tone Raider] curator pool: {len(local_candidates)} local + {len(external_candidates)} Last.fm = {len(model_candidates)} candidates | sound axes: {sorted(sound_axes) or 'none'}",
+            f"[Tune Raider] curator pool: {len(local_candidates)} local + {len(external_candidates)} Last.fm = {len(model_candidates)} candidates | sound axes: {sorted(sound_axes) or 'none'}",
             flush=True,
         )
 
@@ -578,7 +578,7 @@ def ask_for_hybrid_playlist(prompt: str, excluded_tracks=None) -> dict:
             raise ValueError("The hybrid playlist did not contain usable tracks.")
 
         print(
-            f"[Tone Raider] accepted {len(selected)} tracks across {len(artist_counts)} artists; skipped {skipped_artist_cap} over artist cap",
+            f"[Tune Raider] accepted {len(selected)} tracks across {len(artist_counts)} artists; skipped {skipped_artist_cap} over artist cap",
             flush=True,
         )
 
