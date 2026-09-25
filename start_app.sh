@@ -46,4 +46,23 @@ while read -r pid; do
   fi
 done < <(pgrep -f 'app\.py' || true)
 
+echo
+echo "Tone Raider configuration:"
+"$PYTHON" - <<'PY'
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+model = os.environ.get("OLLAMA_MODEL", "gpt-oss:20b").strip()
+api_url = os.environ.get("OLLAMA_API_URL", "https://ollama.com/api/chat").strip()
+port = os.environ.get("PORT", "5000").strip()
+api_key = os.environ.get("OLLAMA_API_KEY", "").strip()
+
+print(f"  Ollama model : {model or '(not set)'}")
+print(f"  Ollama API   : {api_url}")
+print(f"  App port     : {port}")
+print(f"  API key      : {'configured' if api_key else 'NOT SET'}")
+PY
+echo
+
 exec "$PYTHON" app.py
