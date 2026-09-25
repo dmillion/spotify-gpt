@@ -35,6 +35,155 @@
       </path>
     </svg>`;
 
+  function installNetworkTerminal(status) {
+    if (!status || document.querySelector('.network-terminal')) return;
+
+    if (!document.querySelector('#network-terminal-styles')) {
+      const style = document.createElement('style');
+      style.id = 'network-terminal-styles';
+      style.textContent = `
+        .network-terminal {
+          display:none;
+          margin:-6px 0 22px;
+          border:1px solid var(--line);
+          border-left:2px solid var(--acid);
+          background:color-mix(in srgb,var(--control) 88%,transparent);
+          box-shadow:inset 0 0 24px rgba(0,0,0,.22);
+          color:var(--muted);
+          font:12px/1.55 'DM Mono',monospace;
+          overflow:hidden;
+        }
+        .network-terminal[data-active='true'] { display:block; }
+        .network-terminal-head {
+          display:flex;
+          justify-content:space-between;
+          gap:12px;
+          padding:7px 10px;
+          border-bottom:1px solid var(--line);
+          color:var(--acid);
+          letter-spacing:.08em;
+          text-transform:uppercase;
+        }
+        .network-terminal-body { padding:10px; }
+        .network-terminal-line { min-height:19px; color:var(--ink); }
+        .network-terminal-prompt { color:var(--acid); }
+        .network-terminal-note { margin-top:4px; color:var(--muted); opacity:.8; }
+        .network-terminal-track {
+          position:relative;
+          height:3px;
+          margin-top:10px;
+          background:var(--line);
+          overflow:hidden;
+        }
+        .network-terminal-track::after {
+          content:'';
+          position:absolute;
+          top:0;
+          bottom:0;
+          width:24%;
+          background:var(--acid);
+          box-shadow:0 0 8px var(--crt-glow);
+          animation:network-sweep 1.7s linear infinite;
+        }
+        .network-packets { display:flex; gap:5px; align-items:center; margin-top:9px; height:7px; }
+        .network-packets span {
+          width:4px;
+          height:4px;
+          background:var(--line-strong);
+          opacity:.35;
+          animation:network-packet 1.6s ease-in-out infinite;
+        }
+        .network-packets span:nth-child(2) { animation-delay:.12s; }
+        .network-packets span:nth-child(3) { animation-delay:.24s; }
+        .network-packets span:nth-child(4) { animation-delay:.36s; }
+        .network-packets span:nth-child(5) { animation-delay:.48s; }
+        .network-packets span:nth-child(6) { animation-delay:.60s; }
+        .network-packets span:nth-child(7) { animation-delay:.72s; }
+        .network-packets span:nth-child(8) { animation-delay:.84s; }
+        .network-packets span:nth-child(9) { animation-delay:.96s; }
+        .network-packets span:nth-child(10) { animation-delay:1.08s; }
+        @keyframes network-sweep {
+          from { transform:translateX(-110%); }
+          to { transform:translateX(520%); }
+        }
+        @keyframes network-packet {
+          0%,55%,100% { opacity:.25; transform:scaleY(.65); }
+          25% { opacity:1; transform:scaleY(1.45); background:var(--acid); }
+        }
+        @media (prefers-reduced-motion:reduce) {
+          .network-terminal-track::after,
+          .network-packets span { animation:none; }
+          .network-terminal-track::after { width:55%; opacity:.65; }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    const terminal = document.createElement('div');
+    terminal.className = 'network-terminal';
+    terminal.setAttribute('aria-hidden', 'true');
+    terminal.innerHTML = `
+      <div class="network-terminal-head">
+        <span>NET / OLLAMA</span>
+        <span class="network-terminal-elapsed">00:00</span>
+      </div>
+      <div class="network-terminal-body">
+        <div class="network-terminal-line"><span class="network-terminal-prompt">&gt;</span> <span class="network-terminal-message">request queued</span><span class="network-terminal-dots"></span></div>
+        <div class="network-terminal-note">non-streaming inference / exact progress unavailable</div>
+        <div class="network-terminal-track" aria-hidden="true"></div>
+        <div class="network-packets" aria-hidden="true">${'<span></span>'.repeat(10)}</div>
+      </div>`;
+    status.insertAdjacentElement('afterend', terminal);
+
+    const elapsedNode = terminal.querySelector('.network-terminal-elapsed');
+    const messageNode = terminal.querySelector('.network-terminal-message');
+    const dotsNode = terminal.querySelector('.network-terminal-dots');
+    const messages = [
+      'request dispatched to Tune Raider',
+      'waiting on Ollama structured response',
+      'model inference still active',
+      'holding connection open',
+      'no token stream available; response pending',
+      'still listening for model completion',
+    ];
+    let timer = null;
+    let startedAt = 0;
+    let tick = 0;
+
+    const draw = () => {
+      const elapsed = Math.max(0, Math.floor((Date.now() - startedAt) / 1000));
+      const minutes = String(Math.floor(elapsed / 60)).padStart(2, '0');
+      const seconds = String(elapsed % 60).padStart(2, '0');
+      elapsedNode.textContent = `${minutes}:${seconds}`;
+      const messageIndex = Math.min(messages.length - 1, Math.floor(elapsed / 12));
+      messageNode.textContent = messages[messageIndex];
+      dotsNode.textContent = '.'.repeat((tick % 3) + 1);
+      tick += 1;
+    };
+
+    const start = () => {
+      if (timer) return;
+      startedAt = Date.now();
+      tick = 0;
+      terminal.dataset.active = 'true';
+      draw();
+      timer = nativeSetInterval(draw, 1000);
+    };
+    const stop = () => {
+      if (timer) clearInterval(timer);
+      timer = null;
+      terminal.dataset.active = 'false';
+    };
+    const sync = () => {
+      const text = status.textContent.trim();
+      if (/^(CURATING|RESOLVING|GENERATING)\s*\//i.test(text)) start();
+      else stop();
+    };
+
+    new MutationObserver(sync).observe(status, {childList:true, characterData:true, subtree:true});
+    sync();
+  }
+
   const broadOrCrossoverGenre = /^(rock|metal|alternative|alternative rock|indie|indie rock|experimental|crossover|fusion|rap rock|rap metal|funk metal|nu metal)$/i;
   const genreContexts = [
     {key:'sludge', pattern:/\b(sludge|sludge metal|doom|doom metal|stoner|stoner metal|stoner rock|desert rock|heavy psych|southern metal|drone metal)\b/i},
@@ -339,6 +488,7 @@
       };
       new MutationObserver(decorateStatus).observe(status, {childList: true, characterData: true, subtree: true});
       decorateStatus();
+      installNetworkTerminal(status);
     }
 
     if (history) {
