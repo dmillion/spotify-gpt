@@ -59,11 +59,13 @@ load_dotenv(dotenv_path=Path.cwd() / ".env")
 model = os.environ.get("OLLAMA_MODEL", "gpt-oss:20b").strip()
 api_url = os.environ.get("OLLAMA_API_URL", "https://ollama.com/api/chat").strip()
 timeout = os.environ.get("OLLAMA_TIMEOUT", "300").strip()
+think = os.environ.get("OLLAMA_THINK", "false").strip() or "false"
 port = os.environ.get("PORT", "5000").strip()
 api_key = os.environ.get("OLLAMA_API_KEY", "").strip()
 
 print(f"  Ollama model   : {model or '(not set)'}")
 print(f"  Ollama API     : {api_url}")
+print(f"  Ollama think   : {think}")
 print(f"  Ollama timeout : {timeout} seconds")
 print(f"  App port       : {port}")
 print(f"  API key        : {'configured' if api_key else 'NOT SET'}")
