@@ -20,8 +20,6 @@
   document.documentElement.dataset.theme = selected;
   document.documentElement.dataset.crt = crtEnabled ? 'on' : 'off';
 
-  // The legacy inline prompt code still schedules a 9-second placeholder rotation.
-  // Suppress only that obsolete timer; usage polling continues normally.
   const nativeSetInterval = window.setInterval.bind(window);
   window.setInterval = (callback, delay, ...args) => {
     if (delay === 9000) return 0;
@@ -37,118 +35,138 @@
       </path>
     </svg>`;
 
+  const broadOrCrossoverGenre = /^(rock|metal|alternative|alternative rock|indie|indie rock|experimental|crossover|fusion|rap rock|rap metal|funk metal|nu metal)$/i;
   const genreContexts = [
-    {key:'sludge', pattern:/(sludge|doom|stoner|desert rock|heavy psych|southern metal|drone metal)/},
-    {key:'black', pattern:/(black metal|post-black|atmospheric black)/},
-    {key:'extreme', pattern:/(death metal|grind|grindcore|hardcore|powerviolence|metalcore)/},
-    {key:'punk', pattern:/(punk|post-punk|garage|noise rock|post-hardcore)/},
-    {key:'shoegaze', pattern:/(shoegaze|dream pop|slowcore|ethereal|indie pop)/},
-    {key:'electronic', pattern:/(techno|house|electronic|idm|electro|dnb|drum and bass|breakbeat|synthwave)/},
-    {key:'hiphop', pattern:/(hip hop|rap|boom bap|trap|abstract hip hop|underground hip hop)/},
-    {key:'country', pattern:/(country|americana|folk|bluegrass|alt-country)/},
-    {key:'jazz', pattern:/(jazz|fusion|bebop|soul jazz|spiritual jazz)/},
-    {key:'ambient', pattern:/(ambient|drone|new age|soundscape|neoclassical|meditation)/},
+    {key:'sludge', pattern:/\b(sludge|sludge metal|doom|doom metal|stoner|stoner metal|stoner rock|desert rock|heavy psych|southern metal|drone metal)\b/i},
+    {key:'black', pattern:/\b(black metal|post-black|atmospheric black metal|atmospheric black)\b/i},
+    {key:'extreme', pattern:/\b(death metal|grindcore|grind|hardcore|hardcore punk|powerviolence|metalcore|mathcore)\b/i},
+    {key:'punk', pattern:/\b(punk|post-punk|garage punk|garage rock|noise rock|post-hardcore)\b/i},
+    {key:'shoegaze', pattern:/\b(shoegaze|dream pop|slowcore|ethereal wave|indie pop)\b/i},
+    {key:'electronic', pattern:/\b(techno|house|electronic|idm|electro|drum and bass|dnb|breakbeat|synthwave)\b/i},
+    {key:'hiphop', pattern:/\b(hip hop|hip-hop|boom bap|trap|abstract hip hop|underground hip hop)\b/i},
+    {key:'country', pattern:/\b(country|americana|folk|bluegrass|alt-country)\b/i},
+    {key:'jazz', pattern:/\b(jazz|bebop|soul jazz|spiritual jazz|jazz fusion)\b/i},
+    {key:'ambient', pattern:/\b(ambient|dark ambient|drone|new age|soundscape|neoclassical|meditation)\b/i},
   ];
 
-  function dominantGenreContext(genres) {
-    const normalized = genres.map(value => String(value || '').trim()).filter(Boolean);
-    let winner = {key:'generic', score:0, genres:[]};
-    genreContexts.forEach(context => {
-      let score = 0;
-      const matches = [];
-      normalized.forEach((genre, index) => {
-        if (!context.pattern.test(genre.toLowerCase())) return;
-        matches.push(genre);
-        score += 10 + Math.max(0, 3 - index);
-      });
-      if (score > winner.score) winner = {key:context.key, score, genres:matches};
+  function genreEvidence(artist) {
+    const evidence = new Map();
+    const genres = Array.isArray(artist.genres) ? artist.genres : [];
+    genres.forEach((value, index) => {
+      const name = String(value || '').trim();
+      if (!name) return;
+      const id = name.toLowerCase();
+      const score = 2.4 - Math.min(index, 5) * .18;
+      if (!evidence.has(id) || evidence.get(id).weight < score) evidence.set(id, {name, weight:score});
     });
-    return winner.score ? winner : {key:'generic', score:0, genres:normalized};
+
+    const tags = Array.isArray(artist.tags) ? artist.tags : [];
+    tags.forEach((tag, index) => {
+      const name = String(tag?.name || '').trim();
+      if (!name) return;
+      const rawWeight = Number(tag?.weight);
+      const score = Number.isFinite(rawWeight) ? Math.max(.5, Math.min(4, rawWeight / 25)) : Math.max(.7, 1.5 - index * .12);
+      const id = name.toLowerCase();
+      if (!evidence.has(id) || evidence.get(id).weight < score) evidence.set(id, {name, weight:score});
+    });
+    return Array.from(evidence.values());
+  }
+
+  function dominantGenreContext(artist) {
+    const evidence = genreEvidence(artist);
+    const scored = genreContexts.map(context => {
+      const matches = evidence.filter(item => !broadOrCrossoverGenre.test(item.name) && context.pattern.test(item.name));
+      return {
+        key: context.key,
+        score: matches.reduce((total, item) => total + item.weight, 0),
+        matches,
+      };
+    }).sort((a, b) => b.score - a.score);
+
+    const winner = scored[0] || {key:'generic', score:0, matches:[]};
+    const runnerUp = scored[1] || {score:0};
+    const clearLead = winner.score >= 2.2 && (runnerUp.score === 0 || winner.score >= runnerUp.score * 1.35);
+    const corroborated = winner.matches.length >= 2 || winner.score >= 3.2;
+
+    if (!clearLead || !corroborated) {
+      return {key:'generic', confident:false, genres:[]};
+    }
+    return {
+      key:winner.key,
+      confident:true,
+      genres:winner.matches.sort((a, b) => b.weight - a.weight).map(item => item.name),
+    };
   }
 
   function genreTheme(contextKey) {
     const theme = (scenes, qualities, constraints) => ({scenes, qualities, constraints});
-    if (contextKey === 'sludge') {
-      return theme(
-        ['a humid basement show', 'a desert highway after midnight', 'a blown-speaker practice room', 'a smoky bar near closing', 'a slow crawl through industrial backroads'],
-        ['low-slung and riff-heavy', 'dirty, bass-heavy, and physical', 'fuzzy with real forward motion', 'massive without turning static', 'groove-first and rough-edged'],
-        ['favor big riffs', 'avoid overly polished production', 'keep the low end huge', 'skip long shapeless intros', 'lean into deep cuts']
-      );
-    }
-    if (contextKey === 'black') {
-      return theme(
-        ['a freezing predawn walk', 'a storm moving over empty fields', 'a blacked-out highway', 'a windswept ridge', 'a dim winter room'],
-        ['cold, urgent, and atmospheric', 'raw but expansive', 'melodic without softening the edges', 'bleak with forward momentum', 'abrasive and cinematic'],
-        ['avoid glossy production', 'keep the atmosphere tense', 'favor long arcs that still move', 'skip novelty picks', 'let melody emerge through the noise']
-      );
-    }
-    if (contextKey === 'extreme') {
-      return theme(
-        ['a packed concrete room', 'a short violent commute', 'a fluorescent warehouse', 'a late-night gym session', 'a chaotic basement set'],
-        ['percussive and relentless', 'dense but sharply rhythmic', 'fast with real groove underneath', 'ugly in a controlled way', 'compact, physical, and immediate'],
-        ['keep dead air to a minimum', 'favor memorable breakdowns or rhythmic turns', 'avoid overlong intros', 'keep transitions aggressive', 'lean toward tracks with strong momentum']
-      );
-    }
-    if (contextKey === 'punk') {
-      return theme(
-        ['a tiny club with bad lighting', 'a fast drive across town', 'a half-empty dive bar', 'a cramped practice space', 'a gray afternoon with too much caffeine'],
-        ['raw and kinetic', 'angular with strong momentum', 'scrappy but hooky', 'noisy without losing the song', 'tense and rhythm-forward'],
-        ['avoid slick production', 'keep the energy moving', 'favor memorable guitar or bass lines', 'skip filler', 'stay rough around the edges']
-      );
-    }
-    if (contextKey === 'shoegaze') {
-      return theme(
-        ['a wet city drive after dark', 'a washed-out summer evening', 'a bedroom with the windows open', 'a gray Sunday afternoon', 'a train ride through rain'],
-        ['hazy but melodic', 'soft-focus with strong hooks', 'washed-out and emotionally direct', 'dreamy without becoming weightless', 'warm, layered, and bittersweet'],
-        ['keep the melodies strong', 'avoid abrupt stylistic jumps', 'favor texture over virtuosity', 'let the sequence gradually deepen', 'skip overly bright pop detours']
-      );
-    }
-    if (contextKey === 'electronic') {
-      return theme(
-        ['a nearly empty club at 3 a.m.', 'a neon highway', 'a dark warehouse', 'a late-night coding session', 'a city train after midnight'],
-        ['hypnotic and pulse-driven', 'textural with a strong rhythmic spine', 'mechanical but warm', 'propulsive without getting frantic', 'deep, repetitive, and immersive'],
-        ['keep the transitions seamless', 'favor interesting production details', 'avoid cheesy festival peaks', 'let the groove evolve gradually', 'stay focused on rhythm and texture']
-      );
-    }
-    if (contextKey === 'hiphop') {
-      return theme(
-        ['a night drive through the city', 'a dusty record-store afternoon', 'a low-key house party', 'a long train ride', 'a late summer evening'],
-        ['rhythm-first and production-heavy', 'dusty and sample-rich', 'bass-forward with sharp drums', 'left-field but still head-nodding', 'moody with strong pocket'],
-        ['favor distinctive beats', 'avoid generic radio picks', 'keep the sequencing rhythmic', 'lean into deep cuts', 'let production style guide the transitions']
-      );
-    }
-    if (contextKey === 'country') {
-      return theme(
-        ['a two-lane road at dusk', 'a quiet bar after last call', 'a hot afternoon with the windows down', 'a long rural drive', 'a porch after a storm'],
-        ['warm and lived-in', 'dusty with strong storytelling', 'melodic and unpolished', 'rootsy without getting sleepy', 'plainspoken with some grit'],
-        ['avoid glossy crossover production', 'favor strong songwriting', 'lean into deep cuts', 'keep the pacing natural', 'let the instrumentation feel human']
-      );
-    }
-    if (contextKey === 'jazz') {
-      return theme(
-        ['a dim room after midnight', 'a rainy afternoon', 'a quiet dinner that turns strange', 'a late train ride', 'a small club near closing'],
-        ['loose but purposeful', 'warm, intricate, and rhythmic', 'improvisational without losing direction', 'smoky and harmonically rich', 'restless but controlled'],
-        ['favor strong interplay', 'avoid background-music blandness', 'let the arrangements breathe', 'keep a rhythmic thread', 'mix familiar language with stranger turns']
-      );
-    }
-    if (contextKey === 'ambient') {
-      return theme(
-        ['a sleepless 2 a.m. room', 'a slow sunrise', 'a long empty highway at night', 'a rain-muted window', 'a dark room with only streetlight coming in'],
-        ['spacious and slow-moving', 'hazy and immersive', 'minimal but emotionally heavy', 'soft-edged and nocturnal', 'patient, textural, and low-lit'],
-        ['avoid sudden energy spikes', 'let tracks breathe', 'favor long transitions', 'keep percussion restrained', 'stay immersive rather than dramatic']
-      );
-    }
-    return theme(
-      ['a late-night drive', 'a gray afternoon', 'a long walk with headphones', 'a low-key weekend night', 'a road trip with no schedule'],
-      ['coherent and characterful', 'melodic with some edge', 'deep-cut friendly', 'textured without losing momentum', 'distinctive rather than generic'],
-      ['stay close to the artist’s musical neighborhood', 'favor deep cuts', 'make transitions feel intentional', 'avoid obvious filler', 'keep a consistent sonic thread']
+    if (contextKey === 'sludge') return theme(
+      ['a humid basement show', 'a desert highway after midnight', 'a blown-speaker practice room', 'a smoky bar near closing', 'a slow crawl through industrial backroads'],
+      ['low-slung and riff-heavy', 'dirty, bass-heavy, and physical', 'fuzzy with real forward motion', 'massive without turning static', 'groove-first and rough-edged'],
+      ['favor big riffs', 'avoid overly polished production', 'keep the low end huge', 'skip long shapeless intros', 'lean into deep cuts']
     );
+    if (contextKey === 'black') return theme(
+      ['a freezing predawn walk', 'a storm moving over empty fields', 'a blacked-out highway', 'a windswept ridge', 'a dim winter room'],
+      ['cold, urgent, and atmospheric', 'raw but expansive', 'melodic without softening the edges', 'bleak with forward momentum', 'abrasive and cinematic'],
+      ['avoid glossy production', 'keep the atmosphere tense', 'favor long arcs that still move', 'skip novelty picks', 'let melody emerge through the noise']
+    );
+    if (contextKey === 'extreme') return theme(
+      ['a packed concrete room', 'a short violent commute', 'a fluorescent warehouse', 'a late-night gym session', 'a chaotic basement set'],
+      ['percussive and relentless', 'dense but sharply rhythmic', 'fast with real groove underneath', 'ugly in a controlled way', 'compact, physical, and immediate'],
+      ['keep dead air to a minimum', 'favor memorable breakdowns or rhythmic turns', 'avoid overlong intros', 'keep transitions aggressive', 'lean toward tracks with strong momentum']
+    );
+    if (contextKey === 'punk') return theme(
+      ['a tiny club with bad lighting', 'a fast drive across town', 'a half-empty dive bar', 'a cramped practice space', 'a gray afternoon with too much caffeine'],
+      ['raw and kinetic', 'angular with strong momentum', 'scrappy but hooky', 'noisy without losing the song', 'tense and rhythm-forward'],
+      ['avoid slick production', 'keep the energy moving', 'favor memorable guitar or bass lines', 'skip filler', 'stay rough around the edges']
+    );
+    if (contextKey === 'shoegaze') return theme(
+      ['a wet city drive after dark', 'a washed-out summer evening', 'a bedroom with the windows open', 'a gray Sunday afternoon', 'a train ride through rain'],
+      ['hazy but melodic', 'soft-focus with strong hooks', 'washed-out and emotionally direct', 'dreamy without becoming weightless', 'warm, layered, and bittersweet'],
+      ['keep the melodies strong', 'avoid abrupt stylistic jumps', 'favor texture over virtuosity', 'let the sequence gradually deepen', 'skip overly bright pop detours']
+    );
+    if (contextKey === 'electronic') return theme(
+      ['a nearly empty club at 3 a.m.', 'a neon highway', 'a dark warehouse', 'a late-night coding session', 'a city train after midnight'],
+      ['hypnotic and pulse-driven', 'textural with a strong rhythmic spine', 'mechanical but warm', 'propulsive without getting frantic', 'deep, repetitive, and immersive'],
+      ['keep the transitions seamless', 'favor interesting production details', 'avoid cheesy festival peaks', 'let the groove evolve gradually', 'stay focused on rhythm and texture']
+    );
+    if (contextKey === 'hiphop') return theme(
+      ['a night drive through the city', 'a dusty record-store afternoon', 'a low-key house party', 'a long train ride', 'a late summer evening'],
+      ['rhythm-first and production-heavy', 'dusty and sample-rich', 'bass-forward with sharp drums', 'left-field but still head-nodding', 'moody with strong pocket'],
+      ['favor distinctive beats', 'avoid generic radio picks', 'keep the sequencing rhythmic', 'lean into deep cuts', 'let production style guide the transitions']
+    );
+    if (contextKey === 'country') return theme(
+      ['a two-lane road at dusk', 'a quiet bar after last call', 'a hot afternoon with the windows down', 'a long rural drive', 'a porch after a storm'],
+      ['warm and lived-in', 'dusty with strong storytelling', 'melodic and unpolished', 'rootsy without getting sleepy', 'plainspoken with some grit'],
+      ['avoid glossy crossover production', 'favor strong songwriting', 'lean into deep cuts', 'keep the pacing natural', 'let the instrumentation feel human']
+    );
+    if (contextKey === 'jazz') return theme(
+      ['a dim room after midnight', 'a rainy afternoon', 'a quiet dinner that turns strange', 'a late train ride', 'a small club near closing'],
+      ['loose but purposeful', 'warm, intricate, and rhythmic', 'improvisational without losing direction', 'smoky and harmonically rich', 'restless but controlled'],
+      ['favor strong interplay', 'avoid background-music blandness', 'let the arrangements breathe', 'keep a rhythmic thread', 'mix familiar language with stranger turns']
+    );
+    if (contextKey === 'ambient') return theme(
+      ['a sleepless 2 a.m. room', 'a slow sunrise', 'a long empty highway at night', 'a rain-muted window', 'a dark room with only streetlight coming in'],
+      ['spacious and slow-moving', 'hazy and immersive', 'minimal but emotionally heavy', 'soft-edged and nocturnal', 'patient, textural, and low-lit'],
+      ['avoid sudden energy spikes', 'let tracks breathe', 'favor long transitions', 'keep percussion restrained', 'stay immersive rather than dramatic']
+    );
+    return theme([], [], []);
+  }
+
+  function genericIdea(artist) {
+    const ideas = [
+      `Build a playlist around ${artist.name}'s sound; stay close to their musical neighborhood, favor deep cuts, and keep the transitions intentional.`,
+      `Use ${artist.name} as the anchor and explore nearby artists without forcing a genre or mood shift; keep it cohesive and avoid stylistic detours.`,
+      `Start from ${artist.name} and branch outward carefully; prioritize tracks that feel naturally related rather than chasing a specific scene or genre label.`,
+    ];
+    return sample(ideas);
   }
 
   function buildIdea(artist) {
-    const genres = Array.isArray(artist.genres) ? artist.genres : [];
-    const context = dominantGenreContext(genres);
-    const primaryGenre = sample(context.genres.length ? context.genres : genres);
+    const context = dominantGenreContext(artist);
+    if (!context.confident) return genericIdea(artist);
+
+    const primaryGenre = context.genres[0] || '';
     const theme = genreTheme(context.key);
     const scene = sample(theme.scenes);
     const quality = sample(theme.qualities);
