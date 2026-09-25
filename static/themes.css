@@ -114,7 +114,7 @@ textarea { font-size:18px; }
 .prompt-label { display:block; margin:24px 0 10px; font-size:13px; font-weight:500; color:var(--muted); }
 .prompt-help { margin:6px 0 0; color:var(--muted); font-size:11px; }
 .source-control { display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; color:var(--muted); font-size:13px; }
-#library-info { text-transform:none; max-width:850px; margin:16px 0 0; font-size:11px; }
+#library-info { text-transform:none; max-width:850px; margin:16px 0 0; font-size:13px; }
 .studio-footer { display:flex; flex-wrap:wrap; justify-content:space-between; gap:12px; border-top:1px solid var(--line-strong); padding-top:20px; margin-top:36px; font:12px/1.6 'DM Mono',monospace; color:var(--muted); }
 .login-main .workstation-bar { align-items:flex-start; }
 .login-main .station-name { display:none; }
