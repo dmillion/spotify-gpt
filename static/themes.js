@@ -320,7 +320,7 @@
     const ideaButton = document.createElement('button');
     ideaButton.type = 'button';
     ideaButton.className = 'idea-button';
-    ideaButton.textContent = 'Tone It Up';
+    ideaButton.textContent = 'Tone It Up!';
     actions.insertBefore(ideaButton, generateButton);
 
     const clearButton = document.createElement('button');
@@ -359,7 +359,7 @@
 
     ideaButton.addEventListener('click', async () => {
       ideaButton.disabled = true;
-      ideaButton.innerHTML = `${loadingIcon()} <span>Finding Tonage…</span>`;
+      ideaButton.innerHTML = `${loadingIcon()} <span>Fine Toning…</span>`;
       try {
         const profiles = await fetchIdeaProfiles();
         const alternatives = profiles.filter(artist => artist.name !== lastIdeaArtist);
@@ -371,7 +371,7 @@
       } catch (error) {
         if (status) status.textContent = error.message;
       } finally {
-        ideaButton.textContent = 'Tone It Up';
+        ideaButton.textContent = 'Tone It Up!';
         ideaButton.disabled = false;
       }
     });
