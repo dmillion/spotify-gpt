@@ -14,8 +14,8 @@ fi
 
 echo "Stopping existing Tune Raider app processes..."
 
-# Kill only app.py processes whose working directory is this repository.
-# This avoids touching unrelated Python apps elsewhere on the machine.
+# Kill only Tune Raider Flask processes whose working directory is this repository.
+# Match both the legacy app.py entrypoint and the current run_app.py entrypoint.
 while read -r pid; do
   [[ -z "$pid" ]] && continue
   [[ "$pid" == "$$" ]] && continue
@@ -23,11 +23,11 @@ while read -r pid; do
   cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1 || true)"
   command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
 
-  if [[ "$cwd" == "$ROOT" && "$command" == *"app.py"* ]]; then
+  if [[ "$cwd" == "$ROOT" && ( "$command" == *"app.py"* || "$command" == *"run_app.py"* ) ]]; then
     echo "Stopping PID $pid: $command"
     kill "$pid" 2>/dev/null || true
   fi
-done < <(pgrep -f 'app\.py' || true)
+done < <(pgrep -f '(app|run_app)\.py' || true)
 
 # Give Flask's debug parent/child processes a moment to exit cleanly.
 sleep 0.5
@@ -40,11 +40,11 @@ while read -r pid; do
   cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1 || true)"
   command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
 
-  if [[ "$cwd" == "$ROOT" && "$command" == *"app.py"* ]]; then
+  if [[ "$cwd" == "$ROOT" && ( "$command" == *"app.py"* || "$command" == *"run_app.py"* ) ]]; then
     echo "Force-stopping PID $pid"
     kill -9 "$pid" 2>/dev/null || true
   fi
-done < <(pgrep -f 'app\.py' || true)
+done < <(pgrep -f '(app|run_app)\.py' || true)
 
 echo
 echo "Tune Raider configuration:"
@@ -72,4 +72,4 @@ print(f"  API key        : {'configured' if api_key else 'NOT SET'}")
 PY
 echo
 
-exec "$PYTHON" app.py
+exec "$PYTHON" run_app.py
