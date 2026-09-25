@@ -7,7 +7,6 @@
   const defaultPromptPlaceholder = 'Pick an artist or sound and describe where you want it to go...';
   let selected = 'deep-space';
   let crtEnabled = false;
-  let ideaProfiles = [];
   let lastIdeaArtist = '';
   let historyEnhanceInFlight = false;
 
@@ -130,16 +129,15 @@
       : `Build a ${primaryGenre} playlist around ${artist.name}: ${quality}; ${constraint}.`;
   }
 
-  async function ensureIdeaProfiles() {
-    if (ideaProfiles.length) return ideaProfiles;
+  async function fetchIdeaProfiles() {
     const response = await fetch('/api/prompt-profile', {cache: 'no-store'});
     const profile = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(profile.error || 'Could not load playlist ideas.');
-    ideaProfiles = Array.isArray(profile.profiles)
+    const profiles = Array.isArray(profile.profiles)
       ? profile.profiles.filter(artist => artist?.name && Array.isArray(artist.genres) && artist.genres.length)
       : [];
-    if (!ideaProfiles.length) throw new Error('No personalized playlist ideas are available yet.');
-    return ideaProfiles;
+    if (!profiles.length) throw new Error('No personalized playlist ideas are available yet.');
+    return profiles;
   }
 
   async function enhanceHistoryTracks() {
@@ -316,7 +314,7 @@
       ideaButton.disabled = true;
       ideaButton.innerHTML = `${loadingIcon()} <span>Finding Idea…</span>`;
       try {
-        const profiles = await ensureIdeaProfiles();
+        const profiles = await fetchIdeaProfiles();
         const alternatives = profiles.filter(artist => artist.name !== lastIdeaArtist);
         const artist = sample(alternatives.length ? alternatives : profiles);
         lastIdeaArtist = artist.name;
