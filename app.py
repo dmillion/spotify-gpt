@@ -23,12 +23,23 @@ from audio.library_context import Library
 
 load_dotenv()
 
+
+def ollama_think_setting():
+    raw = os.environ.get("OLLAMA_THINK", "false").strip().lower()
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"low", "medium", "high"}:
+        return raw
+    return False
+
+
 ROOT = Path(__file__).parent
 DATABASE = Path(os.environ.get("PLAYLIST_HISTORY_DB", ROOT / "data" / "playlist_history.db"))
 AUDIO_DATABASE = Path(os.environ.get("AUDIO_LIBRARY_DB", ROOT / "data" / "audio_library.sqlite"))
 OLLAMA_API_URL = os.environ.get("OLLAMA_API_URL", "https://ollama.com/api/chat").strip()
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gpt-oss:20b").strip()
 OLLAMA_TIMEOUT = max(1, int(os.environ.get("OLLAMA_TIMEOUT", "300")))
+OLLAMA_THINK = ollama_think_setting()
 OLLAMA_LOCAL_CANDIDATE_LIMIT = max(20, int(os.environ.get("OLLAMA_LOCAL_CANDIDATE_LIMIT", "100")))
 OLLAMA_EXTERNAL_CANDIDATE_LIMIT = max(0, int(os.environ.get("OLLAMA_EXTERNAL_CANDIDATE_LIMIT", "30")))
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "").strip()
@@ -256,7 +267,7 @@ def model_json(instructions: str, prompt: str, schema: dict, *, stage: str = "re
     started = time.monotonic()
     prompt_chars = len(instructions) + len(prompt)
     print(
-        f"[Ollama] {stage} -> {OLLAMA_MODEL} | {prompt_chars:,} chars | timeout {OLLAMA_TIMEOUT}s",
+        f"[Ollama] {stage} -> {OLLAMA_MODEL} | {prompt_chars:,} chars | think {OLLAMA_THINK} | timeout {OLLAMA_TIMEOUT}s",
         flush=True,
     )
     try:
@@ -269,6 +280,7 @@ def model_json(instructions: str, prompt: str, schema: dict, *, stage: str = "re
             json={
                 "model": OLLAMA_MODEL,
                 "stream": False,
+                "think": OLLAMA_THINK,
                 "format": schema,
                 "options": {"temperature": 0},
                 "messages": [
