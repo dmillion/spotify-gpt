@@ -40,8 +40,10 @@ OLLAMA_API_URL = os.environ.get("OLLAMA_API_URL", "https://ollama.com/api/chat")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "gpt-oss:20b").strip()
 OLLAMA_TIMEOUT = max(1, int(os.environ.get("OLLAMA_TIMEOUT", "300")))
 OLLAMA_THINK = ollama_think_setting()
-OLLAMA_LOCAL_CANDIDATE_LIMIT = max(20, int(os.environ.get("OLLAMA_LOCAL_CANDIDATE_LIMIT", "100")))
-OLLAMA_EXTERNAL_CANDIDATE_LIMIT = max(0, int(os.environ.get("OLLAMA_EXTERNAL_CANDIDATE_LIMIT", "30")))
+OLLAMA_LOCAL_CANDIDATE_LIMIT = max(20, int(os.environ.get("OLLAMA_LOCAL_CANDIDATE_LIMIT", "60")))
+OLLAMA_EXTERNAL_CANDIDATE_LIMIT = max(0, int(os.environ.get("OLLAMA_EXTERNAL_CANDIDATE_LIMIT", "20")))
+PLAYLIST_TRACK_LIMIT = max(1, int(os.environ.get("PLAYLIST_TRACK_LIMIT", "20")))
+PLAYLIST_ARTIST_LIMIT = max(1, int(os.environ.get("PLAYLIST_ARTIST_LIMIT", "2")))
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "").strip()
 APP_SESSION_SECRET = os.environ.get("APP_SESSION_SECRET", "").strip()
 
@@ -337,8 +339,8 @@ def compact_catalog_summary(library: Library) -> dict:
     }
 
 
-def compact_local_candidate(row: dict, candidate_id: str) -> dict:
-    """Send only fields that help the curator choose and sequence a local track."""
+def compact_local_candidate(row: dict, candidate_id: str, sound_axes: set[str]) -> dict:
+    """Send only curator-relevant metadata and explicitly requested sound axes."""
     result = {
         "candidate_id": candidate_id,
         "source": "local",
@@ -350,8 +352,10 @@ def compact_local_candidate(row: dict, candidate_id: str) -> dict:
         if value not in (None, ""):
             result[key] = value
     sound = row.get("sound_percentiles")
-    if isinstance(sound, dict) and sound:
-        result["sound"] = sound
+    if isinstance(sound, dict) and sound_axes:
+        filtered = {key: sound[key] for key in sound_axes if key in sound}
+        if filtered:
+            result["sound"] = filtered
     return result
 
 
@@ -490,6 +494,7 @@ def ask_for_hybrid_playlist(prompt: str, excluded_tracks=None) -> dict:
             raise ValueError("The model returned an invalid retrieval plan.")
 
         plan = enrich_library_plan(plan, library)
+        sound_axes = set(plan.get("sound", {})) if isinstance(plan.get("sound"), dict) else set()
         local_candidates = library.candidates(
             plan,
             excluded_tracks or [],
@@ -505,14 +510,14 @@ def ask_for_hybrid_playlist(prompt: str, excluded_tracks=None) -> dict:
         for row in local_candidates:
             candidate_id = f"local:{row['id']}"
             candidate_map[candidate_id] = {"artist": row["artist"], "title": row["title"], "source": "local"}
-            model_candidates.append(compact_local_candidate(row, candidate_id))
+            model_candidates.append(compact_local_candidate(row, candidate_id, sound_axes))
         for index, row in enumerate(external_candidates):
             candidate_id = f"lastfm:{index}"
             candidate_map[candidate_id] = {"artist": row["artist"], "title": row["title"], "source": "lastfm"}
             model_candidates.append({"candidate_id": candidate_id, **row})
 
         print(
-            f"[Tone Raider] curator pool: {len(local_candidates)} local + {len(external_candidates)} Last.fm = {len(model_candidates)} candidates",
+            f"[Tone Raider] curator pool: {len(local_candidates)} local + {len(external_candidates)} Last.fm = {len(model_candidates)} candidates | sound axes: {sorted(sound_axes) or 'none'}",
             flush=True,
         )
 
@@ -520,28 +525,27 @@ def ask_for_hybrid_playlist(prompt: str, excluded_tracks=None) -> dict:
         if excluded_tracks:
             exclusion = "\nDo not repeat these tracks from the previous version:\n- " + "\n- ".join(excluded_tracks)
 
+        ranked_count = min(len(model_candidates), max(PLAYLIST_TRACK_LIMIT + 10, PLAYLIST_TRACK_LIMIT))
         payload = model_json(
-            "Curate a playlist from the supplied hybrid candidate pool. Return JSON: "
+            "Curate a ranked playlist from the supplied hybrid candidate pool. Return JSON: "
             '{"name":"short name","description":"one sentence","tracks":[{"candidate_id":"local:123"}]}. '
-            "Pick 20 tracks unless the user asks otherwise, never more than available. Treat an artist named in the "
-            "user's prompt as an anchor or starting reference unless the user explicitly asks for a playlist dominated "
-            "by that artist; do not assume the anchor should make up most of the playlist. Normally use only one track "
-            "per artist when comparably suitable alternatives exist, and normally no more than two tracks from any one "
-            "artist. Never place a long run of the same artist together unless the user explicitly requests it. Favor "
-            "artist diversity that still preserves a coherent musical neighborhood rather than diversity for its own sake. "
-            "Interpret phrases such as 'build toward', 'start with', 'end with', 'get heavier', 'ease into', or similar "
-            "directional language as sequencing instructions: construct a deliberate early, middle, and late arc, with "
-            "adjacent tracks making intelligible stylistic transitions. The opening should establish the requested anchor; "
-            "the middle should broaden through musically adjacent territory; the ending should arrive at the requested "
-            "destination without abrupt unrelated jumps. Preserve momentum when the prompt asks for heaviness, riffs, groove, "
-            "or forward motion; do not let similarity clustering create repetitive blocks. Local-library candidates are the "
-            "highest-confidence source because they include the user's own metadata and measured audio features. Prefer local "
-            "candidates when choices are comparably suitable and normally keep a clear majority of the playlist local, but do "
-            "not enforce a quota: use Last.fm-supported outside tracks when they improve stylistic accuracy, sequencing, breadth, "
-            "deep-cut variety, or fill gaps in the local collection. Last.fm similarity is collaborative-listening evidence, not "
-            "an objective quality score and not permission to overpopulate one artist or cluster. Local sound measurements are "
-            "authoritative for measurable sonic constraints. Use only supplied candidate_id values; never invent tracks or IDs. "
-            "Candidate pool: " + json.dumps(model_candidates, separators=(",", ":")) + exclusion,
+            f"Return up to {ranked_count} ranked track choices so the application can enforce a final {PLAYLIST_TRACK_LIMIT}-track playlist. "
+            "Treat an artist named in the user's prompt as an anchor or starting reference unless the user explicitly asks for "
+            "a playlist dominated by that artist. Prefer one track per artist when comparably suitable alternatives exist and "
+            f"assume the application will enforce a hard maximum of {PLAYLIST_ARTIST_LIMIT} tracks per artist. Favor artist "
+            "diversity that still preserves a coherent musical neighborhood rather than diversity for its own sake. Interpret "
+            "phrases such as 'build toward', 'start with', 'end with', 'get heavier', 'ease into', or similar directional language "
+            "as sequencing instructions: construct a deliberate early, middle, and late arc, with adjacent tracks making "
+            "intelligible stylistic transitions. The opening should establish the requested anchor; the middle should broaden "
+            "through musically adjacent territory; the ending should arrive at the requested destination without abrupt unrelated "
+            "jumps. Preserve momentum when the prompt asks for heaviness, riffs, groove, or forward motion; do not let similarity "
+            "clustering create repetitive blocks. Local-library candidates are the highest-confidence source because they include "
+            "the user's own metadata and measured audio features. Prefer local candidates when choices are comparably suitable, "
+            "but use Last.fm-supported outside tracks when they improve stylistic accuracy, sequencing, breadth, deep-cut variety, "
+            "or fill gaps in the local collection. Last.fm similarity is collaborative-listening evidence, not an objective "
+            "quality score. Local sound measurements are authoritative only for the sound axes present on each candidate. Use only "
+            "supplied candidate_id values; never invent tracks or IDs. Candidate pool: "
+            + json.dumps(model_candidates, separators=(",", ":")) + exclusion,
             prompt,
             PLAYLIST_SCHEMA,
             stage="final curation",
@@ -551,6 +555,8 @@ def ask_for_hybrid_playlist(prompt: str, excluded_tracks=None) -> dict:
 
         selected = []
         seen = set()
+        artist_counts: dict[str, int] = {}
+        skipped_artist_cap = 0
         for item in payload["tracks"]:
             candidate_id = str(item.get("candidate_id") or "") if isinstance(item, dict) else ""
             candidate = candidate_map.get(candidate_id)
@@ -559,10 +565,22 @@ def ask_for_hybrid_playlist(prompt: str, excluded_tracks=None) -> dict:
             key = (candidate["artist"].casefold(), candidate["title"].casefold())
             if key in seen:
                 continue
+            artist_key = candidate["artist"].casefold()
+            if artist_counts.get(artist_key, 0) >= PLAYLIST_ARTIST_LIMIT:
+                skipped_artist_cap += 1
+                continue
             seen.add(key)
+            artist_counts[artist_key] = artist_counts.get(artist_key, 0) + 1
             selected.append(candidate)
+            if len(selected) >= PLAYLIST_TRACK_LIMIT:
+                break
         if not selected:
             raise ValueError("The hybrid playlist did not contain usable tracks.")
+
+        print(
+            f"[Tone Raider] accepted {len(selected)} tracks across {len(artist_counts)} artists; skipped {skipped_artist_cap} over artist cap",
+            flush=True,
+        )
 
         return {
             "name": str(payload.get("name") or "New Playlist").strip(),
