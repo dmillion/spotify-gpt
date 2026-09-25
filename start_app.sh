@@ -50,9 +50,12 @@ echo
 echo "Tone Raider configuration:"
 "$PYTHON" - <<'PY'
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+# stdin execution gives python-dotenv no caller filename to inspect, so point
+# it at this repo's .env explicitly instead of relying on find_dotenv().
+load_dotenv(dotenv_path=Path.cwd() / ".env")
 model = os.environ.get("OLLAMA_MODEL", "gpt-oss:20b").strip()
 api_url = os.environ.get("OLLAMA_API_URL", "https://ollama.com/api/chat").strip()
 port = os.environ.get("PORT", "5000").strip()
