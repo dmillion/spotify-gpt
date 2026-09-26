@@ -82,8 +82,8 @@
       title?.insertAdjacentElement('afterend', explainer);
     }
     explainer.textContent = local
-      ? `Token workload processed on this Mac${model ? ` by ${model}` : ''}. Higher counts mainly mean more local compute, memory pressure, and inference time—not API charges or account quota.`
-      : `Tokens processed through Ollama Cloud${model ? ` by ${model}` : ''}. This is measured Tune Raider traffic; cloud tokens may matter for account limits or billing depending on your Ollama plan.`;
+      ? `Token workload processed locally${model ? ` by ${model}` : ''}.`
+      : `Tokens processed through Ollama Cloud${model ? ` by ${model}` : ''}.`;
 
     let badge = usage.querySelector('.usage-mode');
     if (!badge) {
