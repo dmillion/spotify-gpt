@@ -1,13 +1,18 @@
 """Supplemental Spotify discovery helpers for sparse constrained searches."""
 from __future__ import annotations
 
+import logging
+
 from activity_log import install_activity_capture
 import spotify_playlist as spotify
 
 # Install after app import but before any playlist request is handled. The capture
-# mirrors only [Ollama] and [Tune Raider] lines, so Werkzeug localhost access logs
-# remain in the VS Code terminal without appearing in the browser terminal.
+# mirrors only [Ollama] and [Tune Raider] lines into the browser terminal.
 install_activity_capture()
+
+# Keep Flask/Werkzeug localhost access lines out of both the in-app terminal and
+# the development console so the diagnostic output stays focused on curation.
+logging.getLogger("werkzeug").setLevel(logging.ERROR)
 
 
 def search_broad_context(
