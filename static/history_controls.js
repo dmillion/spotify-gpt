@@ -63,7 +63,8 @@
         border-color:var(--muted);
       }
       .history-clear[hidden],
-      .history-refine-form[hidden] { display:none; }
+      .history-refine-form[hidden],
+      .history-refine-status[hidden] { display:none; }
       .history-refine-form {
         grid-column:1 / -1;
         display:grid;
@@ -93,7 +94,38 @@
         color:var(--ink);
         font:13px/1.5 'DM Mono',monospace;
       }
-      .history-refine-form.is-working { opacity:.65; pointer-events:none; }
+      .history-refine-form.is-working .history-refine-input,
+      .history-refine-form.is-working .history-refine-cancel { opacity:.45; }
+      .history-refine-form.is-working .history-refine-apply {
+        cursor:wait;
+        color:var(--button-ink);
+        border-color:var(--acid);
+        background:var(--acid);
+      }
+      .history-refine-status {
+        grid-column:1 / -1;
+        display:flex;
+        align-items:center;
+        gap:9px;
+        min-height:28px;
+        padding:5px 0 1px;
+        color:var(--acid);
+        font:500 11px/1.5 'DM Mono',monospace;
+        text-transform:uppercase;
+        letter-spacing:.05em;
+      }
+      .history-refine-spinner {
+        width:12px;
+        height:12px;
+        flex:0 0 12px;
+        border:1px solid var(--line-strong);
+        border-top-color:var(--acid);
+        border-right-color:var(--acid);
+        border-radius:50%;
+        animation:history-refine-spin .7s linear infinite;
+        box-shadow:0 0 6px var(--glow);
+      }
+      @keyframes history-refine-spin { to { transform:rotate(360deg); } }
       @media (max-width:700px) {
         .history-head-actions { gap:8px; }
         .history-clear,
@@ -177,6 +209,10 @@
           </label>
           <button type="button" class="history-refine-apply">Apply</button>
           <button type="button" class="history-refine-cancel">Cancel</button>
+          <div class="history-refine-status" role="status" aria-live="polite" hidden>
+            <span class="history-refine-spinner" aria-hidden="true"></span>
+            <span class="history-refine-status-text">Planning refinement…</span>
+          </div>
         `;
         article.appendChild(form);
       }
@@ -203,9 +239,35 @@
       return;
     }
 
+    const inlineStatus = form.querySelector('.history-refine-status');
+    const inlineStatusText = form.querySelector('.history-refine-status-text');
+    const terminal = document.querySelector('.network-terminal');
+    const originalButtonText = button.textContent;
+    let stageTimer = null;
+
     form.classList.add('is-working');
+    button.disabled = true;
+    button.textContent = 'Applying…';
+    if (inlineStatus) inlineStatus.hidden = false;
+    if (inlineStatusText) inlineStatusText.textContent = 'Planning refinement…';
+    if (terminal) terminal.dataset.active = 'true';
+
     const status = document.querySelector('#status');
     if (status) status.textContent = 'REFINING / CURATING / RESOLVING...';
+
+    // Refinement can take a while with a local model. Keep the nearby status
+    // visibly changing so it never looks like the Apply click was ignored.
+    const stages = [
+      'Curating replacement tracks…',
+      'Resolving tracks with Spotify…',
+      'Building revised playlist…',
+    ];
+    let stageIndex = 0;
+    stageTimer = window.setInterval(() => {
+      if (inlineStatusText) inlineStatusText.textContent = stages[Math.min(stageIndex, stages.length - 1)];
+      if (stageIndex < stages.length - 1) stageIndex += 1;
+    }, 6000);
+
     try {
       const response = await fetch(`/api/history/${encodeURIComponent(id)}/refine`, {
         method:'POST',
@@ -214,10 +276,16 @@
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || 'Could not refine playlist.');
+      if (inlineStatusText) inlineStatusText.textContent = 'Refinement complete. Reloading…';
       if (data.notice) window.alert(data.notice);
       window.location.reload();
     } catch (error) {
+      if (stageTimer) window.clearInterval(stageTimer);
       form.classList.remove('is-working');
+      button.disabled = false;
+      button.textContent = originalButtonText;
+      if (inlineStatus) inlineStatus.hidden = true;
+      if (terminal) terminal.dataset.active = 'false';
       if (status) status.textContent = error.message;
       else window.alert(error.message);
     }
