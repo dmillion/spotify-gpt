@@ -100,8 +100,15 @@ print(f"  Ollama timeout : {timeout} seconds")
 print(f"  App port       : {port}")
 print(f"  API key        : {'configured' if api_key else 'NOT SET'}")
 PY
+
+echo "  Sleep guard    : caffeinate (idle sleep disabled while app runs)"
 echo
 echo "Open Tune Raider at: http://127.0.0.1:$PORT_TO_USE"
 echo
 
+if command -v caffeinate >/dev/null 2>&1; then
+  exec caffeinate -i "$PYTHON" run_app.py
+fi
+
+# Non-macOS fallback: run normally if caffeinate is unavailable.
 exec "$PYTHON" run_app.py
