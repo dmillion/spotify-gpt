@@ -103,14 +103,18 @@ print(f"  API key        : {'configured' if api_key else 'NOT SET'}")
 print(f"  MusicBrainz    : {'enabled' if musicbrainz else 'disabled'}")
 PY
 
-echo "  Sleep guard    : caffeinate (idle sleep disabled while app runs)"
+if command -v caffeinate >/dev/null 2>&1; then
+  # Watch this PID rather than wrapping Python. exec below preserves the PID,
+  # so the sleep assertion lasts exactly as long as Tune Raider does without
+  # interfering with Flask's debug/reloader process startup.
+  caffeinate -i -w "$$" &
+  echo "  Sleep guard    : caffeinate (idle sleep disabled while app runs)"
+else
+  echo "  Sleep guard    : unavailable"
+fi
+
 echo
 echo "Open Tune Raider at: http://127.0.0.1:$PORT_TO_USE"
 echo
 
-if command -v caffeinate >/dev/null 2>&1; then
-  exec caffeinate -i "$PYTHON" run_with_musicbrainz.py
-fi
-
-# Non-macOS fallback: run normally if caffeinate is unavailable.
 exec "$PYTHON" run_with_musicbrainz.py
