@@ -36,6 +36,7 @@ REFINEMENT_PLAN_SCHEMA = {
 
 _original_ask_for_hybrid_playlist = tone_raider.ask_for_hybrid_playlist
 _original_create_from_prompt = tone_raider.create_from_prompt
+_original_home = tone_raider.app.view_functions.get("home")
 
 
 def _excluded_keys(excluded_tracks) -> set[tuple[str, str]]:
@@ -72,8 +73,6 @@ def _merge_tracks(base: list[dict], additions: list[dict], limit: int) -> list[d
             "source": str(track.get("source") or "curated"),
         })
 
-    # Preserve an existing playlist during refinement even if it predates the
-    # current artist-cap policy. Only new additions are subject to the cap.
     for track in base:
         add(track, enforce_artist_cap=False)
     for track in additions:
@@ -341,8 +340,6 @@ def _refine_playlist(row, instruction: str) -> dict:
 
     final_tracks = _merge_tracks(remaining, additions, target_count)
     if len(final_tracks) < target_count and additions:
-        # A second, more permissive pass can fill remaining slots while retaining
-        # the user's requested direction.
         excluded = [f"{track.get('artist', '')} - {track.get('title', '')}" for track in final_tracks]
         broad = _original_ask_for_hybrid_playlist(
             f"{addition_prompt or instruction}\nBroaden this slightly with musically adjacent choices to fill the remaining playlist slots.",
@@ -393,6 +390,21 @@ def clear_history():
         count = connection.execute("SELECT COUNT(*) FROM generated_playlists").fetchone()[0]
         connection.execute("DELETE FROM generated_playlists")
     return jsonify({"deleted": int(count)})
+
+
+def _home_with_history_controls():
+    html = _original_home() if _original_home else ""
+    if isinstance(html, str) and "history_controls.js" not in html:
+        html = html.replace(
+            "</head>",
+            '<script defer src="/static/history_controls.js"></script>\n</head>',
+            1,
+        )
+    return html
+
+
+if _original_home:
+    tone_raider.app.view_functions["home"] = _home_with_history_controls
 
 
 if __name__ == "__main__":
