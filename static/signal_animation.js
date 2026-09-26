@@ -12,6 +12,9 @@
     const style = document.createElement('style');
     style.id = 'signal-runner-styles';
     style.textContent = `
+      :root {
+        --signal-primary-trail:180;
+      }
       .signal-primary {
         opacity:.34 !important;
         animation:none !important;
@@ -24,15 +27,15 @@
         stroke-width:1.8;
         vector-effect:non-scaling-stroke;
         stroke-linecap:round;
-        stroke-dasharray:100 1900;
-        stroke-dashoffset:100;
+        stroke-dasharray:var(--signal-primary-trail) 1900;
+        stroke-dashoffset:var(--signal-primary-trail);
         opacity:.95;
         filter:drop-shadow(0 0 4px var(--crt-glow));
         animation:signal-runner var(--signal-primary-duration) linear infinite;
         will-change:stroke-dashoffset;
       }
       @keyframes signal-runner {
-        from { stroke-dashoffset:100; }
+        from { stroke-dashoffset:var(--signal-primary-trail); }
         to { stroke-dashoffset:-1900; }
       }
     `;
