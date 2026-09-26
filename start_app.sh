@@ -15,7 +15,7 @@ fi
 echo "Stopping existing Tune Raider app processes..."
 
 # Kill only Tune Raider Flask processes whose working directory is this repository.
-# Match both the legacy app.py entrypoint and the current run_app.py entrypoint.
+# Match the legacy app.py/run_app.py entrypoints and the MusicBrainz-aware wrapper.
 while read -r pid; do
   [[ -z "$pid" ]] && continue
   [[ "$pid" == "$$" ]] && continue
@@ -23,11 +23,11 @@ while read -r pid; do
   cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1 || true)"
   command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
 
-  if [[ "$cwd" == "$ROOT" && ( "$command" == *"app.py"* || "$command" == *"run_app.py"* ) ]]; then
+  if [[ "$cwd" == "$ROOT" && ( "$command" == *"app.py"* || "$command" == *"run_app.py"* || "$command" == *"run_with_musicbrainz.py"* ) ]]; then
     echo "Stopping PID $pid: $command"
     kill "$pid" 2>/dev/null || true
   fi
-done < <(pgrep -f '(app|run_app)\.py' || true)
+done < <(pgrep -f '(app|run_app|run_with_musicbrainz)\.py' || true)
 
 # Give Flask's debug parent/child processes a moment to exit cleanly.
 sleep 0.5
@@ -40,11 +40,11 @@ while read -r pid; do
   cwd="$(lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p' | head -n 1 || true)"
   command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
 
-  if [[ "$cwd" == "$ROOT" && ( "$command" == *"app.py"* || "$command" == *"run_app.py"* ) ]]; then
+  if [[ "$cwd" == "$ROOT" && ( "$command" == *"app.py"* || "$command" == *"run_app.py"* || "$command" == *"run_with_musicbrainz.py"* ) ]]; then
     echo "Force-stopping PID $pid"
     kill -9 "$pid" 2>/dev/null || true
   fi
-done < <(pgrep -f '(app|run_app)\.py' || true)
+done < <(pgrep -f '(app|run_app|run_with_musicbrainz)\.py' || true)
 
 # Load the requested port from .env without sourcing arbitrary shell contents.
 REQUESTED_PORT="$($PYTHON - <<'PY'
@@ -92,6 +92,7 @@ timeout = os.environ.get("OLLAMA_TIMEOUT", "300").strip()
 think = os.environ.get("OLLAMA_THINK", "false").strip() or "false"
 port = os.environ.get("PORT", "5000").strip()
 api_key = os.environ.get("OLLAMA_API_KEY", "").strip()
+musicbrainz = os.environ.get("MUSICBRAINZ_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"}
 
 print(f"  Ollama model   : {model or '(not set)'}")
 print(f"  Ollama API     : {api_url}")
@@ -99,6 +100,7 @@ print(f"  Ollama think   : {think}")
 print(f"  Ollama timeout : {timeout} seconds")
 print(f"  App port       : {port}")
 print(f"  API key        : {'configured' if api_key else 'NOT SET'}")
+print(f"  MusicBrainz    : {'enabled' if musicbrainz else 'disabled'}")
 PY
 
 echo "  Sleep guard    : caffeinate (idle sleep disabled while app runs)"
@@ -107,8 +109,8 @@ echo "Open Tune Raider at: http://127.0.0.1:$PORT_TO_USE"
 echo
 
 if command -v caffeinate >/dev/null 2>&1; then
-  exec caffeinate -i "$PYTHON" run_app.py
+  exec caffeinate -i "$PYTHON" run_with_musicbrainz.py
 fi
 
 # Non-macOS fallback: run normally if caffeinate is unavailable.
-exec "$PYTHON" run_app.py
+exec "$PYTHON" run_with_musicbrainz.py
