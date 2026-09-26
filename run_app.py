@@ -8,10 +8,76 @@ from flask import jsonify
 
 import app as tone_raider
 from anchor_policy import ensure_prompt_anchor
-from intent_policy import apply_request_constraints, has_title_constraint
+from intent_policy import apply_request_constraints, has_title_constraint, title_constraint
 
 
 _original_ask_for_hybrid_playlist = tone_raider.ask_for_hybrid_playlist
+
+
+def _excluded_keys(excluded_tracks) -> set[tuple[str, str]]:
+    result = set()
+    for value in excluded_tracks or []:
+        artist, separator, title = str(value).partition(" - ")
+        if separator:
+            result.add((tone_raider.spotify.normalize(artist), tone_raider.spotify.normalize(title)))
+    return result
+
+
+def _supplement_title_query_from_spotify(prompt: str, generated: dict, excluded_tracks=None) -> dict:
+    """Broaden literal title searches beyond the bounded local/Last.fm curator pool."""
+    intent = title_constraint(prompt)
+    if not intent:
+        return generated
+
+    token = tone_raider.spotify.get_access_token()
+    discovered = tone_raider.spotify.search_tracks_by_title_term(
+        token,
+        intent["term"],
+        heavy_preference=bool(intent.get("heavy_preference")),
+        limit=max(50, tone_raider.PLAYLIST_TRACK_LIMIT * 3),
+    )
+
+    selected = list(generated.get("tracks") or [])
+    excluded = _excluded_keys(excluded_tracks)
+    merged = []
+    seen = set()
+    artist_counts: dict[str, int] = {}
+
+    def add(artist: str, title: str, source: str) -> None:
+        if len(merged) >= tone_raider.PLAYLIST_TRACK_LIMIT:
+            return
+        artist = str(artist or "").strip()
+        title = str(title or "").strip()
+        artist_key = tone_raider.spotify.normalize(artist)
+        title_key = tone_raider.spotify.normalize(title)
+        key = (artist_key, title_key)
+        if not artist_key or not title_key or key in seen or key in excluded:
+            return
+        if artist_counts.get(artist_key, 0) >= tone_raider.PLAYLIST_ARTIST_LIMIT:
+            return
+        seen.add(key)
+        artist_counts[artist_key] = artist_counts.get(artist_key, 0) + 1
+        merged.append({"artist": artist, "title": title, "source": source})
+
+    # Keep heavy local/library matches already selected by intent_policy first.
+    for track in selected:
+        add(track.get("artist", ""), track.get("title", ""), str(track.get("source") or "curated-title-match"))
+
+    for track in discovered:
+        artists = track.get("artists") or []
+        primary_artist = str((artists[0] if artists else {}).get("name") or "").strip()
+        add(primary_artist, track.get("name", ""), "spotify-title-search")
+        if len(merged) >= tone_raider.PLAYLIST_TRACK_LIMIT:
+            break
+
+    if merged:
+        generated["tracks"] = merged
+
+    print(
+        f"[Tune Raider] Spotify title discovery: '{intent['term']}' -> {len(discovered)} matches, {len(merged)} selected",
+        flush=True,
+    )
+    return generated
 
 
 def ask_for_hybrid_playlist_with_safeguards(prompt: str, excluded_tracks=None) -> dict:
@@ -25,9 +91,11 @@ def ask_for_hybrid_playlist_with_safeguards(prompt: str, excluded_tracks=None) -
     )
 
     # Literal title/name searches are constraint queries, not artist-inspiration
-    # prompts. Skipping anchor inference here prevents a word such as "goat" from
-    # accidentally being interpreted as an artist named Goat.
-    if not has_title_constraint(prompt):
+    # prompts. Broaden them with Spotify title search, then skip anchor inference so
+    # a word such as "goat" cannot become an accidental artist named Goat anchor.
+    if has_title_constraint(prompt):
+        generated = _supplement_title_query_from_spotify(prompt, generated, excluded_tracks)
+    else:
         generated = ensure_prompt_anchor(
             prompt,
             generated,
