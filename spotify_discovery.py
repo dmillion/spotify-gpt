@@ -64,8 +64,6 @@ def search_title_term(
         return []
 
     qualifiers = ["metal", "sludge", "doom", "hardcore", "grind", "stoner"] if heavy_preference else []
-    # Keep the field-filter query simple. Extra style words are separate searches;
-    # returned items are always checked against the literal title constraint.
     queries = [f'{term} {qualifier}' for qualifier in qualifiers]
     queries.extend([f'track:{term}', term])
 
@@ -85,6 +83,12 @@ def search_title_term(
             if len(results) >= target:
                 return results
     return results
+
+
+# run_app historically calls spotify.search_tracks_by_title_term(). Replace that
+# helper at import time so every title-constraint request uses the current paginated
+# Search implementation without leaving the old limit=50 code path reachable.
+spotify.search_tracks_by_title_term = search_title_term
 
 
 def search_broad_context(
