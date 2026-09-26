@@ -8,7 +8,10 @@
     style.textContent = `
       .history-head-actions { display:flex; align-items:center; gap:12px; }
       .history-clear,
-      .history-remove {
+      .history-remove,
+      .history-refine,
+      .history-refine-apply,
+      .history-refine-cancel {
         min-height:36px;
         padding:7px 10px;
         border:1px solid var(--line-strong);
@@ -18,17 +21,63 @@
         text-transform:uppercase;
         letter-spacing:.04em;
       }
+      .history-refine:hover,
+      .history-refine-apply:hover {
+        color:var(--button-ink);
+        border-color:var(--acid);
+        background:var(--acid);
+      }
       .history-clear:hover,
       .history-remove:hover {
         color:var(--red);
         border-color:var(--red);
         background:color-mix(in srgb,var(--red) 8%,transparent);
       }
-      .history-clear[hidden] { display:none; }
+      .history-refine-cancel:hover {
+        color:var(--ink);
+        border-color:var(--muted);
+      }
+      .history-clear[hidden],
+      .history-refine-form[hidden] { display:none; }
+      .history-refine-form {
+        grid-column:1 / -1;
+        display:grid;
+        grid-template-columns:minmax(0,1fr) auto auto;
+        gap:8px;
+        align-items:end;
+        margin-top:4px;
+        padding:12px;
+        border-left:1px solid var(--line-strong);
+        background:var(--control);
+      }
+      .history-refine-form label {
+        display:grid;
+        gap:6px;
+        color:var(--muted);
+        font:500 11px/1.4 'DM Mono',monospace;
+        text-transform:uppercase;
+        letter-spacing:.04em;
+      }
+      .history-refine-input {
+        width:100%;
+        min-height:70px;
+        resize:vertical;
+        padding:10px 12px;
+        border:1px solid var(--line);
+        background:var(--surface);
+        color:var(--ink);
+        font:13px/1.5 'DM Mono',monospace;
+      }
+      .history-refine-form.is-working { opacity:.65; pointer-events:none; }
       @media (max-width:700px) {
         .history-head-actions { gap:8px; }
         .history-clear,
-        .history-remove { min-height:40px; }
+        .history-remove,
+        .history-refine,
+        .history-refine-apply,
+        .history-refine-cancel { min-height:40px; }
+        .history-refine-form { grid-template-columns:1fr 1fr; }
+        .history-refine-form label { grid-column:1 / -1; }
       }
     `;
     document.head.appendChild(style);
@@ -69,18 +118,84 @@
     history.querySelectorAll('.playlist').forEach(article => {
       const actions = article.querySelector('.actions');
       const regen = actions?.querySelector('.regen');
-      if (!actions || !regen || actions.querySelector('.history-remove')) return;
+      if (!actions || !regen) return;
+      const id = regen.dataset.id || '';
 
-      const removeButton = document.createElement('button');
-      removeButton.type = 'button';
-      removeButton.className = 'history-remove';
-      removeButton.dataset.id = regen.dataset.id || '';
-      removeButton.textContent = 'Remove';
-      removeButton.title = 'Remove from Tune Raider history only';
-      actions.appendChild(removeButton);
+      if (!actions.querySelector('.history-refine')) {
+        const refineButton = document.createElement('button');
+        refineButton.type = 'button';
+        refineButton.className = 'history-refine';
+        refineButton.dataset.id = id;
+        refineButton.textContent = 'Refine';
+        refineButton.title = 'Create a revised version from another prompt';
+        actions.appendChild(refineButton);
+      }
+
+      if (!actions.querySelector('.history-remove')) {
+        const removeButton = document.createElement('button');
+        removeButton.type = 'button';
+        removeButton.className = 'history-remove';
+        removeButton.dataset.id = id;
+        removeButton.textContent = 'Remove';
+        removeButton.title = 'Remove from Tune Raider history only';
+        actions.appendChild(removeButton);
+      }
+
+      if (!article.querySelector('.history-refine-form')) {
+        const form = document.createElement('div');
+        form.className = 'history-refine-form';
+        form.hidden = true;
+        form.dataset.id = id;
+        form.innerHTML = `
+          <label>Refinement prompt
+            <textarea class="history-refine-input" placeholder="e.g. remove the hip-hop tracks; add 5 slower doom songs; make the back half heavier"></textarea>
+          </label>
+          <button type="button" class="history-refine-apply">Apply</button>
+          <button type="button" class="history-refine-cancel">Cancel</button>
+        `;
+        article.appendChild(form);
+      }
     });
 
     syncCount();
+  }
+
+  function toggleRefine(button) {
+    const article = button.closest('.playlist');
+    const form = article?.querySelector('.history-refine-form');
+    if (!form) return;
+    form.hidden = !form.hidden;
+    if (!form.hidden) form.querySelector('.history-refine-input')?.focus();
+  }
+
+  async function applyRefinement(button) {
+    const form = button.closest('.history-refine-form');
+    const input = form?.querySelector('.history-refine-input');
+    const id = form?.dataset.id;
+    const instruction = input?.value?.trim() || '';
+    if (!form || !id || !instruction) {
+      window.alert('Describe what you want to change first.');
+      return;
+    }
+
+    form.classList.add('is-working');
+    const status = document.querySelector('#status');
+    if (status) status.textContent = 'REFINING / CURATING / RESOLVING...';
+    try {
+      const response = await fetch(`/api/history/${encodeURIComponent(id)}/refine`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({instruction}),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Could not refine playlist.');
+      if (data.notice) window.alert(data.notice);
+      window.location.reload();
+    } catch (error) {
+      form.classList.remove('is-working');
+      if (status) status.textContent = error.message;
+      else window.alert(error.message);
+    }
   }
 
   async function deleteOne(button) {
@@ -131,6 +246,25 @@
     if (history) new MutationObserver(enhanceHistory).observe(history, {childList:true, subtree:true});
 
     document.addEventListener('click', event => {
+      const refineButton = event.target.closest('.history-refine');
+      if (refineButton) {
+        event.preventDefault();
+        toggleRefine(refineButton);
+        return;
+      }
+      const applyButton = event.target.closest('.history-refine-apply');
+      if (applyButton) {
+        event.preventDefault();
+        applyRefinement(applyButton);
+        return;
+      }
+      const cancelButton = event.target.closest('.history-refine-cancel');
+      if (cancelButton) {
+        event.preventDefault();
+        const form = cancelButton.closest('.history-refine-form');
+        if (form) form.hidden = true;
+        return;
+      }
       const removeButton = event.target.closest('.history-remove');
       if (removeButton) {
         event.preventDefault();
