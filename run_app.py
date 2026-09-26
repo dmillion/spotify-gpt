@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 
+from flask import jsonify
+
 import app as tone_raider
 from anchor_policy import ensure_prompt_anchor
 from intent_policy import apply_request_constraints, has_title_constraint
@@ -38,6 +40,28 @@ def ask_for_hybrid_playlist_with_safeguards(prompt: str, excluded_tracks=None) -
 
 
 tone_raider.ask_for_hybrid_playlist = ask_for_hybrid_playlist_with_safeguards
+
+
+@tone_raider.app.delete("/api/history/<int:playlist_id>")
+def delete_history_item(playlist_id: int):
+    """Remove one generated playlist from local Tune Raider history only."""
+    with tone_raider.database() as connection:
+        cursor = connection.execute(
+            "DELETE FROM generated_playlists WHERE id = ?",
+            (playlist_id,),
+        )
+    if cursor.rowcount == 0:
+        return jsonify({"error": "That playlist is no longer in local history."}), 404
+    return jsonify({"deleted": True, "id": playlist_id})
+
+
+@tone_raider.app.delete("/api/history")
+def clear_history():
+    """Clear generated-playlist history without touching Spotify playlists."""
+    with tone_raider.database() as connection:
+        count = connection.execute("SELECT COUNT(*) FROM generated_playlists").fetchone()[0]
+        connection.execute("DELETE FROM generated_playlists")
+    return jsonify({"deleted": int(count)})
 
 
 if __name__ == "__main__":
