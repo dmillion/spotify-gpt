@@ -1,5 +1,23 @@
 (() => {
   const EMPTY_HISTORY = '<div class="empty">No playlists yet. Give the machine a mood.</div>';
+  let pendingBuildNotice = '';
+
+  // The original inline generator owns the main request flow. Capture optional
+  // backend notices without replacing that flow, then append them to its status.
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = async (...args) => {
+    const response = await nativeFetch(...args);
+    const url = String(args[0]?.url || args[0] || '');
+    if (response.ok && (/\/api\/generate(?:\?|$)/.test(url) || /\/api\/history\/\d+\/regenerate(?:\?|$)/.test(url))) {
+      try {
+        const data = await response.clone().json();
+        pendingBuildNotice = String(data.notice || '').trim();
+      } catch (_) {
+        pendingBuildNotice = '';
+      }
+    }
+    return response;
+  };
 
   function injectStyles() {
     if (document.querySelector('#history-controls-style')) return;
@@ -241,6 +259,19 @@
   document.addEventListener('DOMContentLoaded', () => {
     injectStyles();
     enhanceHistory();
+
+    const status = document.querySelector('#status');
+    if (status) {
+      const appendBuildNotice = () => {
+        const text = status.textContent.trim();
+        if (pendingBuildNotice && text.startsWith('Built “')) {
+          const notice = pendingBuildNotice;
+          pendingBuildNotice = '';
+          status.textContent = `${text} ${notice}`;
+        }
+      };
+      new MutationObserver(appendBuildNotice).observe(status, {childList:true, characterData:true, subtree:true});
+    }
 
     const history = document.querySelector('#history');
     if (history) new MutationObserver(enhanceHistory).observe(history, {childList:true, subtree:true});
