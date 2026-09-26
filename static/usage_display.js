@@ -1,5 +1,4 @@
 (() => {
-  let updating = false;
   let runtime = {ollama_mode:'unknown', ollama_model:''};
 
   const compact = value => {
@@ -8,6 +7,10 @@
     if (number >= 1_000_000) return `${(number / 1_000_000).toFixed(number >= 10_000_000 ? 0 : 1)}M`;
     if (number >= 1_000) return `${(number / 1_000).toFixed(1)}K`;
     return number.toLocaleString();
+  };
+
+  const setText = (node, text) => {
+    if (node && node.textContent !== text) node.textContent = text;
   };
 
   function installStyles() {
@@ -53,7 +56,7 @@
     const local = runtime.ollama_mode === 'local';
     const model = String(runtime.ollama_model || '').trim();
     const title = document.querySelector('#usage-title');
-    if (title) title.textContent = local ? 'Local model workload' : 'Ollama cloud usage';
+    setText(title, local ? 'Local model workload' : 'Ollama cloud usage');
 
     const labels = local
       ? [
@@ -71,8 +74,7 @@
 
     labels.forEach(([selector, text]) => {
       const value = document.querySelector(selector);
-      const label = value?.parentElement?.querySelector('.meta');
-      if (label) label.textContent = text;
+      setText(value?.parentElement?.querySelector('.meta'), text);
     });
 
     let explainer = usage.querySelector('.usage-explainer');
@@ -81,9 +83,12 @@
       explainer.className = 'usage-explainer';
       title?.insertAdjacentElement('afterend', explainer);
     }
-    explainer.textContent = local
-      ? `Token workload processed locally${model ? ` by ${model}` : ''}.`
-      : `Tokens processed through Ollama Cloud${model ? ` by ${model}` : ''}.`;
+    setText(
+      explainer,
+      local
+        ? `Token workload processed locally${model ? ` by ${model}` : ''}.`
+        : `Tokens processed through Ollama Cloud${model ? ` by ${model}` : ''}.`
+    );
 
     let badge = usage.querySelector('.usage-mode');
     if (!badge) {
@@ -91,7 +96,7 @@
       badge.className = 'usage-mode';
       explainer.insertAdjacentElement('afterend', badge);
     }
-    badge.textContent = local ? 'Local inference' : runtime.ollama_mode === 'cloud' ? 'Cloud inference' : 'Ollama';
+    setText(badge, local ? 'Local inference' : runtime.ollama_mode === 'cloud' ? 'Cloud inference' : 'Ollama');
   }
 
   async function loadRuntime() {
@@ -101,7 +106,7 @@
       runtime = await response.json();
       relabel();
     } catch (_) {
-      // Keep the generic labels if runtime mode cannot be determined.
+      // Keep generic labels if runtime mode cannot be determined.
     }
   }
 
@@ -117,7 +122,6 @@
       const splitTotal = input + output;
       const local = runtime.ollama_mode === 'local';
 
-      updating = true;
       const values = {
         '#usage-total': [total, local ? 'all-time locally processed tokens' : 'all-time recorded cloud tokens'],
         '#usage-today': [today, 'tokens recorded today (UTC)'],
@@ -127,12 +131,10 @@
       Object.entries(values).forEach(([selector, [value, description]]) => {
         const node = document.querySelector(selector);
         if (!node) return;
-        node.textContent = compact(value);
+        setText(node, compact(value));
         node.title = `${value.toLocaleString()} ${description}`;
       });
 
-      const inputNode = document.querySelector('#usage-input');
-      const outputNode = document.querySelector('#usage-output');
       const addShare = (node, value) => {
         if (!node) return;
         let share = node.parentElement.querySelector('.usage-share');
@@ -141,18 +143,17 @@
           share.className = 'usage-share';
           node.insertAdjacentElement('afterend', share);
         }
-        share.textContent = splitTotal ? `${Math.round(value / splitTotal * 100)}% of token workload` : '—';
+        setText(share, splitTotal ? `${Math.round(value / splitTotal * 100)}% of token workload` : '—');
       };
-      addShare(inputNode, input);
-      addShare(outputNode, output);
+      addShare(document.querySelector('#usage-input'), input);
+      addShare(document.querySelector('#usage-output'), output);
 
       const inputBar = document.querySelector('#usage-input-bar');
       const outputBar = document.querySelector('#usage-output-bar');
       if (inputBar) inputBar.style.width = `${splitTotal ? input / splitTotal * 100 : 0}%`;
       if (outputBar) outputBar.style.width = `${splitTotal ? output / splitTotal * 100 : 0}%`;
-      updating = false;
     } catch (_) {
-      updating = false;
+      // Leave the last good values in place.
     }
   }
 
@@ -162,14 +163,6 @@
     await loadRuntime();
     await refresh();
     setInterval(() => { if (!document.hidden) refresh(); }, 10000);
-
-    const usage = document.querySelector('.usage');
-    if (usage) {
-      new MutationObserver(() => {
-        if (updating) return;
-        relabel();
-      }).observe(usage, {childList:true, subtree:true});
-    }
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
