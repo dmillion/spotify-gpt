@@ -2,8 +2,12 @@
 from __future__ import annotations
 
 import logging
+from urllib.parse import urlsplit
+
+from flask import jsonify
 
 from activity_log import install_activity_capture
+import app as tone_raider
 import spotify_playlist as spotify
 
 # Install after app import but before any playlist request is handled. The capture
@@ -16,6 +20,23 @@ logging.getLogger("werkzeug").setLevel(logging.ERROR)
 
 SEARCH_PAGE_LIMIT = 10
 SEARCH_MAX_OFFSET = 1000
+
+
+def ollama_is_local() -> bool:
+    """Return whether Tune Raider is pointed at an Ollama server on this machine."""
+    host = (urlsplit(tone_raider.OLLAMA_API_URL).hostname or "").casefold()
+    return host in {"127.0.0.1", "localhost", "::1"}
+
+
+@tone_raider.app.get("/api/runtime")
+def runtime_info():
+    """Expose non-secret runtime details needed for accurate UI terminology."""
+    local = ollama_is_local()
+    return jsonify({
+        "ollama_mode": "local" if local else "cloud",
+        "ollama_model": tone_raider.OLLAMA_MODEL,
+        "ollama_api_url": tone_raider.OLLAMA_API_URL,
+    })
 
 
 def _search_pages(token: str, query: str, *, target: int) -> list[dict]:
