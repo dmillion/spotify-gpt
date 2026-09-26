@@ -64,10 +64,18 @@ def enrich_library_plan_with_musicbrainz(plan: dict, library) -> dict:
 
 
 def external_candidates_with_musicbrainz(plan: dict, local_candidates: list[dict], excluded_tracks=None) -> list[dict]:
-    existing = list(_original_external_candidates(plan, local_candidates, excluded_tracks) or [])
-    if not musicbrainz.ENABLED or tone_raider.OLLAMA_EXTERNAL_CANDIDATE_LIMIT <= len(existing):
+    full_lastfm = list(_original_external_candidates(plan, local_candidates, excluded_tracks) or [])
+    budget = max(0, tone_raider.OLLAMA_EXTERNAL_CANDIDATE_LIMIT)
+    if not musicbrainz.ENABLED or budget == 0:
         _musicbrainz_candidate_keys.set(set())
-        return existing
+        return full_lastfm
+
+    # Reserve roughly one third of the external pool (up to 8 tracks) so a full
+    # Last.fm result cannot crowd MusicBrainz out before the caller applies its
+    # external-candidate limit. Any unused reservation falls back to Last.fm.
+    musicbrainz_budget = min(8, max(3, budget // 3))
+    lastfm_budget = max(0, budget - musicbrainz_budget)
+    existing = full_lastfm[:lastfm_budget]
 
     excluded = tone_raider.excluded_track_keys(excluded_tracks)
     seen = set(excluded)
@@ -85,14 +93,16 @@ def external_candidates_with_musicbrainz(plan: dict, local_candidates: list[dict
         if len(seeds) >= 4:
             break
 
-    remaining = max(0, tone_raider.OLLAMA_EXTERNAL_CANDIDATE_LIMIT - len(existing))
     added = []
     mb_keys = set()
     for seed in seeds:
-        if len(added) >= remaining:
+        if len(added) >= musicbrainz_budget:
             break
         try:
-            recordings = musicbrainz.recordings_by_artist(seed, limit=min(8, remaining - len(added)))
+            recordings = musicbrainz.recordings_by_artist(
+                seed,
+                limit=min(8, musicbrainz_budget - len(added)),
+            )
         except (requests.RequestException, RuntimeError, ValueError):
             continue
         for row in recordings:
@@ -106,8 +116,20 @@ def external_candidates_with_musicbrainz(plan: dict, local_candidates: list[dict
                 "title": row["title"],
                 "source": "musicbrainz",
             })
-            if len(added) >= remaining:
+            if len(added) >= musicbrainz_budget:
                 break
+
+    # If MusicBrainz produced fewer candidates than its reservation, fill those
+    # unused slots back from Last.fm so enabling the source never shrinks the pool.
+    result = existing + added
+    for row in full_lastfm[lastfm_budget:]:
+        if len(result) >= budget:
+            break
+        key = (_normalize(row.get("artist")), _normalize(row.get("title")))
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(row)
 
     _musicbrainz_candidate_keys.set(mb_keys)
     if added:
@@ -115,7 +137,7 @@ def external_candidates_with_musicbrainz(plan: dict, local_candidates: list[dict
             f"[Tune Raider] MusicBrainz supplemented external pool with {len(added)} recordings",
             flush=True,
         )
-    return existing + added
+    return result
 
 
 def ask_for_hybrid_playlist_with_musicbrainz_labels(prompt: str, excluded_tracks=None) -> dict:
