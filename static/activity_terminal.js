@@ -2,6 +2,8 @@
   let cursor = 0;
   let primed = false;
   let timer = null;
+  const MAX_VISIBLE_LINES = 100;
+  const STICK_THRESHOLD = 36;
 
   if (!document.querySelector('script[data-tune-raider-usage]')) {
     const usageScript = document.createElement('script');
@@ -17,16 +19,20 @@
     style.textContent = `
       .network-terminal-live {
         display:none;
-        max-height:150px;
-        overflow:hidden;
+        max-height:260px;
+        overflow-x:auto;
+        overflow-y:auto;
+        overscroll-behavior:contain;
+        scrollbar-gutter:stable;
         margin:0;
-        padding:0;
+        padding:0 4px 2px 0;
       }
       .network-terminal-live[data-has-lines='true'] { display:block; }
       .network-terminal-log {
         min-height:19px;
         color:var(--ink);
         overflow-wrap:anywhere;
+        white-space:pre-wrap;
       }
       .network-terminal-log + .network-terminal-log { margin-top:2px; }
       .network-terminal-log::before { content:'> '; color:var(--acid); }
@@ -44,6 +50,9 @@
     if (!live) {
       live = document.createElement('div');
       live.className = 'network-terminal-live';
+      live.setAttribute('role', 'log');
+      live.setAttribute('aria-live', 'off');
+      live.setAttribute('aria-label', 'Tune Raider activity log');
       body.insertBefore(live, body.querySelector('.network-terminal-track'));
     }
     return {terminal, live};
@@ -53,6 +62,11 @@
     terminal.dataset.live = 'false';
     live.dataset.hasLines = 'false';
     live.replaceChildren();
+    live.scrollTop = 0;
+  }
+
+  function isNearBottom(node) {
+    return node.scrollHeight - node.scrollTop - node.clientHeight <= STICK_THRESHOLD;
   }
 
   function appendLines(lines) {
@@ -60,6 +74,11 @@
     if (!nodes || !Array.isArray(lines) || !lines.length) return;
     const {terminal, live} = nodes;
     if (terminal.dataset.active !== 'true') return;
+
+    const shouldStick = !live.dataset.hasLines || isNearBottom(live);
+    const activeElement = document.activeElement;
+    const pageX = window.scrollX;
+    const pageY = window.scrollY;
 
     terminal.dataset.live = 'true';
     live.dataset.hasLines = 'true';
@@ -69,7 +88,17 @@
       line.textContent = String(entry?.message || '');
       live.appendChild(line);
     }
-    while (live.children.length > 7) live.firstElementChild?.remove();
+
+    while (live.children.length > MAX_VISIBLE_LINES) live.firstElementChild?.remove();
+    if (shouldStick) live.scrollTop = live.scrollHeight;
+
+    // Updating the diagnostic feed must never redirect keyboard focus or move the page.
+    if (activeElement && document.activeElement !== activeElement && activeElement.isConnected) {
+      activeElement.focus({preventScroll:true});
+    }
+    if (window.scrollX !== pageX || window.scrollY !== pageY) {
+      window.scrollTo({left:pageX, top:pageY, behavior:'instant'});
+    }
   }
 
   async function poll() {
