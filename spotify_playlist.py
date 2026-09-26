@@ -400,6 +400,51 @@ def search_track(token: str, requested: TrackRequest) -> dict | None:
     return best if track_score(best, requested) >= 0.72 else None
 
 
+def search_tracks_by_title_term(
+    token: str,
+    term: str,
+    *,
+    heavy_preference: bool = False,
+    limit: int = 50,
+) -> list[dict]:
+    """Discover Spotify tracks whose titles literally contain ``term``.
+
+    Heavy-oriented queries are attempted first when requested, but every returned
+    item is still filtered by the literal title substring so style hints cannot
+    weaken the user's title constraint.
+    """
+    needle = normalize(term)
+    if not needle:
+        return []
+
+    qualifiers = ["metal", "sludge", "doom", "hardcore", "grind", "stoner"] if heavy_preference else []
+    queries = [f'track:"{term}" {qualifier}' for qualifier in qualifiers]
+    queries.append(f'track:"{term}"')
+
+    results: list[dict] = []
+    seen_ids: set[str] = set()
+    target = max(1, min(limit, 100))
+
+    for query in queries:
+        response = api_request(
+            "GET",
+            "/search",
+            token,
+            params={"q": query, "type": "track", "limit": 50},
+        )
+        for item in response.json().get("tracks", {}).get("items", []):
+            track_id = str(item.get("id") or "").strip()
+            if not track_id or track_id in seen_ids:
+                continue
+            if needle not in normalize(item.get("name", "")):
+                continue
+            seen_ids.add(track_id)
+            results.append(item)
+            if len(results) >= target:
+                return results
+    return results
+
+
 def top_artists(token: str, limit: int = 20, time_range: str = "medium_term") -> list[dict]:
     response = api_request(
         "GET",
