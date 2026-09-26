@@ -3,6 +3,13 @@
   let primed = false;
   let timer = null;
 
+  if (!document.querySelector('script[data-tune-raider-usage]')) {
+    const usageScript = document.createElement('script');
+    usageScript.src = '/static/usage_display.js';
+    usageScript.dataset.tuneRaiderUsage = 'true';
+    document.head.appendChild(usageScript);
+  }
+
   function installStyles() {
     if (document.querySelector('#activity-terminal-styles')) return;
     const style = document.createElement('style');
