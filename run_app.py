@@ -6,24 +6,38 @@ import os
 
 import app as tone_raider
 from anchor_policy import ensure_prompt_anchor
+from intent_policy import apply_request_constraints, has_title_constraint
 
 
 _original_ask_for_hybrid_playlist = tone_raider.ask_for_hybrid_playlist
 
 
-def ask_for_hybrid_playlist_with_anchor(prompt: str, excluded_tracks=None) -> dict:
+def ask_for_hybrid_playlist_with_safeguards(prompt: str, excluded_tracks=None) -> dict:
     generated = _original_ask_for_hybrid_playlist(prompt, excluded_tracks)
-    return ensure_prompt_anchor(
+    generated = apply_request_constraints(
         prompt,
         generated,
         tone_raider.AUDIO_DATABASE,
-        excluded_tracks=excluded_tracks,
         track_limit=tone_raider.PLAYLIST_TRACK_LIMIT,
         artist_limit=tone_raider.PLAYLIST_ARTIST_LIMIT,
     )
 
+    # Literal title/name searches are constraint queries, not artist-inspiration
+    # prompts. Skipping anchor inference here prevents a word such as "goat" from
+    # accidentally being interpreted as an artist named Goat.
+    if not has_title_constraint(prompt):
+        generated = ensure_prompt_anchor(
+            prompt,
+            generated,
+            tone_raider.AUDIO_DATABASE,
+            excluded_tracks=excluded_tracks,
+            track_limit=tone_raider.PLAYLIST_TRACK_LIMIT,
+            artist_limit=tone_raider.PLAYLIST_ARTIST_LIMIT,
+        )
+    return generated
 
-tone_raider.ask_for_hybrid_playlist = ask_for_hybrid_playlist_with_anchor
+
+tone_raider.ask_for_hybrid_playlist = ask_for_hybrid_playlist_with_safeguards
 
 
 if __name__ == "__main__":
