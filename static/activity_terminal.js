@@ -12,6 +12,13 @@
     document.head.appendChild(usageScript);
   }
 
+  if (!document.querySelector('script[data-tune-raider-signal]')) {
+    const signalScript = document.createElement('script');
+    signalScript.src = '/static/signal_animation.js';
+    signalScript.dataset.tuneRaiderSignal = 'true';
+    document.head.appendChild(signalScript);
+  }
+
   function installStyles() {
     if (document.querySelector('#activity-terminal-styles')) return;
     const style = document.createElement('style');
