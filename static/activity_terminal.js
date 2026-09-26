@@ -86,6 +86,7 @@
   }
 
   function install() {
+    if (timer) return;
     installStyles();
     const nodes = ensureLiveArea();
     if (!nodes) {
@@ -100,6 +101,7 @@
     timer = setInterval(poll, 500);
   }
 
-  document.addEventListener('DOMContentLoaded', install);
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', install);
+  else install();
   window.addEventListener('beforeunload', () => { if (timer) clearInterval(timer); });
 })();
