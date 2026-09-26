@@ -2,6 +2,13 @@
   const EMPTY_HISTORY = '<div class="empty">No playlists yet. Give the machine a mood.</div>';
   let pendingBuildNotice = '';
 
+  if (!document.querySelector('script[data-tune-raider-activity]')) {
+    const activityScript = document.createElement('script');
+    activityScript.src = '/static/activity_terminal.js';
+    activityScript.dataset.tuneRaiderActivity = 'true';
+    document.head.appendChild(activityScript);
+  }
+
   // The original inline generator owns the main request flow. Capture optional
   // backend notices without replacing that flow, then append them to its status.
   const nativeFetch = window.fetch.bind(window);
