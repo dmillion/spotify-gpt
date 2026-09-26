@@ -1,7 +1,13 @@
 """Supplemental Spotify discovery helpers for sparse constrained searches."""
 from __future__ import annotations
 
+from activity_log import install_activity_capture
 import spotify_playlist as spotify
+
+# Install after app import but before any playlist request is handled. The capture
+# mirrors only [Ollama] and [Tune Raider] lines, so Werkzeug localhost access logs
+# remain in the VS Code terminal without appearing in the browser terminal.
+install_activity_capture()
 
 
 def search_broad_context(
