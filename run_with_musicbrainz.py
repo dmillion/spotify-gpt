@@ -5,8 +5,9 @@ from __future__ import annotations
 
 import os
 
-# Install MusicBrainz hooks before run_app captures app-level functions.
+# Install enrichment hooks before run_app captures app-level functions.
 import musicbrainz_integration  # noqa: F401,E402
+import prompt_ideas_enrichment  # noqa: F401,E402
 import run_app  # noqa: E402
 
 
