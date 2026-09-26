@@ -130,8 +130,6 @@
       <div class="network-terminal-body">
         <div class="network-terminal-line"><span class="network-terminal-prompt">&gt;</span> <span class="network-terminal-message">request queued</span><span class="network-terminal-dots"></span></div>
         <div class="network-terminal-note">non-streaming inference / exact progress unavailable</div>
-        <div class="network-terminal-track" aria-hidden="true"></div>
-        <div class="network-packets" aria-hidden="true">${'<span></span>'.repeat(10)}</div>
       </div>`;
     status.insertAdjacentElement('afterend', terminal);
 
