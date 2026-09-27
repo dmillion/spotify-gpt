@@ -8,6 +8,7 @@ import requests
 from flask import jsonify, request
 
 import run_app
+from preference_policy import artist_blocked, blocked_artists
 
 tr = run_app.tone_raider
 
@@ -31,7 +32,7 @@ def _contextual_discovery_prompt(row, instruction: str, addition_prompt: str, re
     surviving = [
         f"{track.get('artist', '')} - {track.get('title', '')}"
         for track in remaining[:12]
-        if track.get("artist") and track.get("title")
+        if track.get("artist") and track.get("title") and not artist_blocked(track.get("artist", ""))
     ]
     parts = [
         "Refine an existing playlist without changing its core musical identity.",
@@ -43,6 +44,8 @@ def _contextual_discovery_prompt(row, instruction: str, addition_prompt: str, re
         parts.append(f"Parent description: {row['description']}")
     if surviving:
         parts.append("Surviving musical reference tracks: " + "; ".join(surviving))
+    if blocked_artists():
+        parts.append("Globally blocked artists: " + ", ".join(sorted(blocked_artists())) + ". Never include them.")
     parts.extend([
         f"Refinement request: {instruction}",
         f"Replacement goal: {addition_prompt or instruction}",
@@ -58,12 +61,20 @@ def _save_refined_playlist(source_row, instruction: str, requested_tracks: list[
     resolved = []
     missing = []
     seen_uris = set()
+    requested_tracks = [
+        track for track in requested_tracks
+        if not artist_blocked(track.get("artist", ""))
+    ]
     for requested_track in requested_tracks:
         req = tr.spotify.TrackRequest(
             str(requested_track.get("artist") or ""),
             str(requested_track.get("title") or ""),
         )
         track = tr.spotify.search_track(token, req)
+        artists = track.get("artists") if track else []
+        primary_artist = str((artists[0] if artists else {}).get("name") or req.artist).strip()
+        if artist_blocked(primary_artist):
+            continue
         if track and track.get("uri") not in seen_uris:
             resolved.append(track)
             seen_uris.add(track["uri"])
@@ -122,8 +133,9 @@ def _save_refined_playlist(source_row, instruction: str, requested_tracks: list[
 
 def _refine_playlist(row, instruction: str) -> dict:
     current = json.loads(row["source_tracks"]) or json.loads(row["tracks"])
+    current = [track for track in current if not artist_blocked(track.get("artist", ""))]
     if not current:
-        raise tr.AppError("That history item has no tracks to refine.")
+        raise tr.AppError("That history item has no tracks to refine after global exclusions were applied.")
 
     numbered = [
         {"index": index, "artist": track.get("artist", ""), "title": track.get("title", "")}
@@ -136,10 +148,11 @@ def _refine_playlist(row, instruction: str) -> dict:
         "Use addition_prompt to describe replacements, but preserve the parent playlist's musical identity unless the user explicitly asks for a stylistic change. "
         "Do not reinterpret a simple exclusion as permission to broaden genre. target_count should preserve the current count unless the user explicitly changes size. "
         "Preserve unaffected tracks and their order. Create a concise revised playlist name and one-sentence description. "
-        "Existing playlist: " + json.dumps({
+        "Never include globally blocked artists. Existing playlist: " + json.dumps({
             "name": row["name"],
             "description": row["description"],
             "original_prompt": root or row["prompt"],
+            "blocked_artists": sorted(blocked_artists()),
             "tracks": numbered,
         }),
         instruction,
@@ -152,6 +165,7 @@ def _refine_playlist(row, instruction: str) -> dict:
         if isinstance(value, int) and 1 <= value <= len(current)
     }
     remaining = [track for index, track in enumerate(current, 1) if index not in remove_indexes]
+    remaining = [track for track in remaining if not artist_blocked(track.get("artist", ""))]
     target_count = max(1, min(int(plan.get("target_count") or len(remaining) or 1), run_app.MAX_REFINEMENT_TRACKS))
     addition_prompt = str(plan.get("addition_prompt") or "").strip()
 
@@ -160,9 +174,13 @@ def _refine_playlist(row, instruction: str) -> dict:
         discovery_prompt = _contextual_discovery_prompt(row, instruction, addition_prompt, remaining)
         excluded = [f"{track.get('artist', '')} - {track.get('title', '')}" for track in current]
         generated = tr.ask_for_hybrid_playlist(discovery_prompt, excluded)
-        additions = list(generated.get("tracks") or [])
+        additions = [
+            track for track in (generated.get("tracks") or [])
+            if not artist_blocked(track.get("artist", ""))
+        ]
 
     final_tracks = run_app._merge_tracks(remaining, additions, target_count)
+    final_tracks = [track for track in final_tracks if not artist_blocked(track.get("artist", ""))]
 
     # One second pass is allowed only inside the exact same parent context. Do not
     # call the old unconstrained broadener, which was the source of genre drift.
@@ -171,7 +189,12 @@ def _refine_playlist(row, instruction: str) -> dict:
         strict_prompt = _contextual_discovery_prompt(row, instruction, addition_prompt, final_tracks)
         strict_prompt += "\nFind additional replacements only if they remain tightly inside this same sound. Do not broaden genre to hit the target count."
         second = tr.ask_for_hybrid_playlist(strict_prompt, excluded)
-        final_tracks = run_app._merge_tracks(final_tracks, list(second.get("tracks") or []), target_count)
+        second_tracks = [
+            track for track in (second.get("tracks") or [])
+            if not artist_blocked(track.get("artist", ""))
+        ]
+        final_tracks = run_app._merge_tracks(final_tracks, second_tracks, target_count)
+        final_tracks = [track for track in final_tracks if not artist_blocked(track.get("artist", ""))]
 
     name = str(plan.get("name") or f"{row['name']} · Refined").strip()
     description = str(plan.get("description") or row["description"] or tr.spotify.DEFAULT_DESCRIPTION).strip()
