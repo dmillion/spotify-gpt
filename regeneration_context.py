@@ -1,4 +1,4 @@
-"""Context-preserving regeneration with Spotify-resolution backfill."""
+"""Fresh regeneration with Spotify-resolution backfill."""
 from __future__ import annotations
 
 import json
@@ -8,34 +8,23 @@ import requests
 from flask import jsonify
 
 import run_app
+from learning_store import record
 from preference_policy import artist_blocked
 
 tr = run_app.tone_raider
 
 
-def _style_prompt(row, previous: list[dict], *, refill: bool = False) -> str:
-    specimens = [
-        f"{track.get('artist', '')} - {track.get('title', '')}"
-        for track in previous[:16]
-        if track.get("artist") and track.get("title")
-    ]
-    parts = [
-        str(row["prompt"] or "").strip(),
-        "Generate an alternate version of this playlist, but stay tightly connected to the same source sound.",
-        "The previous playlist tracks below are positive style specimens, not merely exclusions. Use them to understand what worked: genre, instrumentation, rhythmic feel, production language, energy, and proximity to the named inspiration.",
-    ]
-    if row["description"]:
-        parts.append(f"Previous playlist description: {row['description']}")
-    if specimens:
-        parts.append("Previous successful style specimens: " + "; ".join(specimens))
-    parts.append(
-        "Do not repeat those exact tracks, but find different tracks that are at least as close to the original inspiration and requested mood. Do not broaden into merely adjacent scenes just to fill space. Prefer more correct tracks over fewer when enough strong candidates exist."
+def _fresh_prompt(row, *, refill: bool = False) -> str:
+    """Rerun the saved prompt without treating the prior playlist as positive context."""
+    prompt = str(row["prompt"] or "").strip()
+    if not refill:
+        return prompt
+    return (
+        prompt
+        + "\n\nThis is a fresh retry of the same request because some candidates failed Spotify resolution. "
+          "Find additional tracks that independently satisfy the ORIGINAL prompt. Do not use the previous playlist as style evidence "
+          "and do not broaden the requested genre/sound merely to fill space."
     )
-    if refill:
-        parts.append(
-            "This is a refill pass because some otherwise-good candidates could not be resolved on Spotify. Find additional alternatives inside the SAME style envelope; do not loosen genre or source proximity."
-        )
-    return "\n".join(part for part in parts if part)
 
 
 def _resolve(token: str, requested: list[dict], *, seen_uris=None) -> tuple[list[dict], list[str]]:
@@ -77,25 +66,27 @@ def regenerate_contextual(playlist_id: int):
     )
 
     try:
-        prompt = _style_prompt(row, previous)
-        generated = tr.ask_for_hybrid_playlist(prompt, excluded)
+        # Same saved prompt, same complete discovery pipeline, fresh candidate draw.
+        # Previous tracks are only exact-track exclusions so Regenerate behaves like
+        # "try this prompt again", while Refine remains the iterative/contextual action.
+        generated = tr.ask_for_hybrid_playlist(_fresh_prompt(row), excluded)
         requested = list(generated.get("tracks") or [])
 
         token = tr.spotify.get_access_token()
         seen_uris: set[str] = set()
         resolved, missing = _resolve(token, requested, seen_uris=seen_uris)
 
-        # Resolution failures should not silently shrink a regeneration. Run one
-        # tightly constrained refill pass and resolve only genuinely new tracks.
         if len(resolved) < target_count:
             refill_excluded = excluded + [
                 f"{', '.join(a['name'] for a in track.get('artists', []))} - {track.get('name', '')}"
                 for track in resolved
             ]
-            refill_prompt = _style_prompt(row, previous, refill=True)
-            refill = tr.ask_for_hybrid_playlist(refill_prompt, refill_excluded)
-            extra_requested = list(refill.get("tracks") or [])
-            extra_resolved, extra_missing = _resolve(token, extra_requested, seen_uris=seen_uris)
+            refill = tr.ask_for_hybrid_playlist(_fresh_prompt(row, refill=True), refill_excluded)
+            extra_resolved, extra_missing = _resolve(
+                token,
+                list(refill.get("tracks") or []),
+                seen_uris=seen_uris,
+            )
             resolved.extend(extra_resolved)
             missing.extend(extra_missing)
 
@@ -139,9 +130,7 @@ def regenerate_contextual(playlist_id: int):
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         if len(tracks) < target_count:
-            result["notice"] = (
-                f"Regeneration targeted {target_count} tracks but only {len(tracks)} could be resolved while staying inside the source sound."
-            )
+            result["notice"] = f"Regeneration targeted {target_count} tracks but only {len(tracks)} resolved cleanly."
 
         with tr.database() as connection:
             cursor = connection.execute(
@@ -153,14 +142,23 @@ def regenerate_contextual(playlist_id: int):
             )
             result["id"] = cursor.lastrowid
 
-        print(
-            f"[Tune Raider] regenerate: target {target_count}, resolved {len(tracks)}, unresolved candidates {len(missing)}",
-            flush=True,
+        record(
+            tr.database,
+            "regenerate",
+            playlist_id=result["id"],
+            parent_playlist_id=playlist_id,
+            prompt=str(row["prompt"] or ""),
+            payload={
+                "previous_tracks": previous_resolved,
+                "new_tracks": tracks,
+                "excluded_exact_tracks": excluded,
+                "interpretation": "fresh_retry_not_negative_feedback",
+            },
         )
+        print(f"[Tune Raider] regenerate fresh retry: target {target_count}, resolved {len(tracks)}", flush=True)
         return jsonify(result)
     except (tr.AppError, tr.spotify.SpotifyError, requests.RequestException, ValueError) as exc:
         return jsonify({"error": str(exc), "help_url": getattr(exc, "help_url", None)}), getattr(exc, "status_code", 502)
 
 
-# Replace the route registered by app.py after run_app has installed safeguards.
 tr.app.view_functions["regenerate"] = regenerate_contextual
