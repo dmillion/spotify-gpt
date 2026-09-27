@@ -42,7 +42,7 @@
     },
     add: {
       eyebrow: 'ADD TO',
-      title: 'Expanding a playlist that is already working',
+      title: 'Expanding playlist',
       status: 'EXPANDING CURRENT PLAYLIST',
       stages: [
         ['READING LIVE SPOTIFY STATE', 'Scanning the playlist before adding anything new.'],
