@@ -20,6 +20,7 @@ import playlist_additions  # noqa: F401,E402
 import add_to_ui  # noqa: F401,E402
 import task_progress_ui  # noqa: F401,E402
 import playlist_prompt_tags_ui  # noqa: F401,E402
+import track_prompt_ui  # noqa: F401,E402
 
 
 if __name__ == "__main__":
