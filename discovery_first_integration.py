@@ -14,6 +14,7 @@ import sqlite3
 import app as tone_raider
 import artist_similarity_integration as anchor_similarity
 from anchor_policy import _prompt_artist_name
+from preference_policy import artist_blocked, blocked_artists, normalize_artist
 
 # Capture enrichment/discovery hooks installed before this module (MusicBrainz and
 # explicit-artist similarity). Their output remains part of the discovery pool.
@@ -21,10 +22,19 @@ _enrich_plan = tone_raider.enrich_library_plan
 _external_candidates = tone_raider.lastfm_external_candidates
 
 LOCAL_SPECIMEN_LIMIT = max(8, int(os.environ.get("DISCOVERY_LOCAL_SPECIMEN_LIMIT", "24")))
-EXTERNAL_DISCOVERY_LIMIT = max(20, int(os.environ.get("DISCOVERY_EXTERNAL_LIMIT", "48")))
+EXTERNAL_DISCOVERY_LIMIT = max(30, int(os.environ.get("DISCOVERY_EXTERNAL_LIMIT", "72")))
 LOCAL_FINAL_LIMIT = max(1, int(os.environ.get("DISCOVERY_LOCAL_FINAL_LIMIT", "5")))
 ANCHOR_MIN_TRACKS = max(1, int(os.environ.get("DISCOVERY_ANCHOR_MIN_TRACKS", "2")))
 ANCHOR_MAX_TRACKS = max(ANCHOR_MIN_TRACKS, int(os.environ.get("DISCOVERY_ANCHOR_MAX_TRACKS", "3")))
+NON_ANCHOR_ARTIST_LIMIT = max(1, int(os.environ.get("DISCOVERY_NON_ANCHOR_ARTIST_LIMIT", "1")))
+
+# The upstream discovery hooks consult this dynamically. Raise the effective budget
+# here so discovery-first generation can actually see more than the old 20-track
+# external pool without changing legacy/library-only behavior elsewhere.
+tone_raider.OLLAMA_EXTERNAL_CANDIDATE_LIMIT = max(
+    tone_raider.OLLAMA_EXTERNAL_CANDIDATE_LIMIT,
+    EXTERNAL_DISCOVERY_LIMIT,
+)
 
 
 def _explicit_library_request(prompt: str) -> bool:
@@ -60,7 +70,7 @@ def _compact_external(row: dict, candidate_id: str) -> dict:
 def ask_for_discovery_first_playlist(prompt: str, excluded_tracks=None) -> dict:
     """Curate primarily from discovered music, using the local library as evidence."""
     anchor_name = _prompt_artist_name(prompt) or ""
-    anchor_key = anchor_name.casefold().strip()
+    anchor_key = normalize_artist(anchor_name)
     anchor_token = anchor_similarity._prompt_anchor_artist.set(anchor_name)
     try:
         try:
@@ -87,17 +97,21 @@ def ask_for_discovery_first_playlist(prompt: str, excluded_tracks=None) -> dict:
 
             # The library supplies representative examples and acoustic reference points,
             # but is intentionally bounded so familiar material cannot crowd out discovery.
-            local_candidates = library.candidates(
-                plan,
-                excluded_tracks or [],
-                limit=LOCAL_SPECIMEN_LIMIT,
-            )
+            local_candidates = [
+                row for row in library.candidates(
+                    plan,
+                    excluded_tracks or [],
+                    limit=LOCAL_SPECIMEN_LIMIT,
+                )
+                if not artist_blocked(row.get("artist", ""))
+            ]
 
             # External discovery is the primary candidate source. Existing MusicBrainz
             # and artist-similarity hooks participate here automatically.
-            external_candidates = list(
-                _external_candidates(plan, local_candidates, excluded_tracks) or []
-            )[:EXTERNAL_DISCOVERY_LIMIT]
+            external_candidates = [
+                row for row in (_external_candidates(plan, local_candidates, excluded_tracks) or [])
+                if not artist_blocked(row.get("artist", ""))
+            ][:EXTERNAL_DISCOVERY_LIMIT]
 
             library_only = _explicit_library_request(prompt)
             if library_only:
@@ -135,6 +149,7 @@ def ask_for_discovery_first_playlist(prompt: str, excluded_tracks=None) -> dict:
             print(
                 f"[Tune Raider] discovery-first pool: {len(external_candidates)} discovered + "
                 f"{len(local_candidates)} local specimens = {len(model_candidates)} candidates | "
+                f"blocked artists: {', '.join(sorted(blocked_artists())) or 'none'} | "
                 f"sound axes: {sorted(sound_axes) or 'none'}",
                 flush=True,
             )
@@ -145,8 +160,9 @@ def ask_for_discovery_first_playlist(prompt: str, excluded_tracks=None) -> dict:
 
             ranked_count = min(
                 len(model_candidates),
-                max(tone_raider.PLAYLIST_TRACK_LIMIT + 14, tone_raider.PLAYLIST_TRACK_LIMIT),
+                max(tone_raider.PLAYLIST_TRACK_LIMIT + 18, tone_raider.PLAYLIST_TRACK_LIMIT),
             )
+            target_count = min(tone_raider.PLAYLIST_TRACK_LIMIT, len(model_candidates))
             local_guidance = (
                 "The user explicitly requested their local library, so local candidates may dominate. "
                 if library_only
@@ -168,8 +184,8 @@ def ask_for_discovery_first_playlist(prompt: str, excluded_tracks=None) -> dict:
             payload = tone_raider.model_json(
                 "Curate a ranked discovery playlist from the supplied candidate pool. Return JSON: "
                 '{"name":"short name","description":"one sentence","tracks":[{"candidate_id":"discovery:0"}]}. '
-                f"Return up to {ranked_count} ranked choices so the application can enforce a final "
-                f"{tone_raider.PLAYLIST_TRACK_LIMIT}-track playlist. "
+                f"Return up to {ranked_count} ranked choices and, when the pool supports it, aim to fill all {target_count} final "
+                "playlist slots rather than stopping early. More good options are better because the user can refine afterward. "
                 + local_guidance + anchor_guidance +
                 "A named artist or track in the user's prompt is the musical reference point. First understand its actual genre, "
                 "style, instrumentation, production language, era/scene, and rhythmic character; then expand outward through music "
@@ -177,9 +193,10 @@ def ask_for_discovery_first_playlist(prompt: str, excluded_tracks=None) -> dict:
                 "similarity is supporting evidence, not permission to cross into a different genre. Broad tags such as rock, folk, "
                 "indie, country, jazz, or blues are insufficient on their own when the anchor has a more specific sound. Apply user "
                 "modifiers such as party, darker, heavier, slower, melodic, or danceable *within* the anchor's musical vocabulary "
-                "unless the prompt explicitly requests a stylistic transition. Prefer one track per artist when comparable alternatives "
-                "exist, except that the explicitly named inspiration artist may contribute several strong tracks. Preserve a coherent "
-                "sequence. Use only supplied candidate_id values; never invent tracks or IDs. Candidate pool: "
+                "unless the prompt explicitly requests a stylistic transition. Maximize useful artist variety: normally choose one "
+                "track per non-anchor artist when comparable alternatives exist, while the explicitly named inspiration artist may "
+                "contribute several strong tracks. Do not select any globally blocked artist. Preserve a coherent sequence. Use only "
+                "supplied candidate_id values; never invent tracks or IDs. Candidate pool: "
                 + json.dumps(model_candidates, separators=(",", ":")) + exclusion,
                 prompt,
                 tone_raider.PLAYLIST_SCHEMA,
@@ -194,6 +211,7 @@ def ask_for_discovery_first_playlist(prompt: str, excluded_tracks=None) -> dict:
             local_count = 0
             skipped_local = 0
             skipped_artist_cap = 0
+            skipped_blocked = 0
 
             for item in payload["tracks"]:
                 candidate_id = str(item.get("candidate_id") or "") if isinstance(item, dict) else ""
@@ -203,12 +221,15 @@ def ask_for_discovery_first_playlist(prompt: str, excluded_tracks=None) -> dict:
 
                 artist = str(candidate.get("artist") or "").strip()
                 title = str(candidate.get("title") or "").strip()
-                key = (artist.casefold(), title.casefold())
+                artist_key = normalize_artist(artist)
+                key = (artist_key, title.casefold())
                 if not artist or not title or key in seen:
                     continue
+                if artist_blocked(artist):
+                    skipped_blocked += 1
+                    continue
 
-                artist_key = artist.casefold()
-                artist_cap = ANCHOR_MAX_TRACKS if anchor_key and artist_key == anchor_key else tone_raider.PLAYLIST_ARTIST_LIMIT
+                artist_cap = ANCHOR_MAX_TRACKS if anchor_key and artist_key == anchor_key else NON_ANCHOR_ARTIST_LIMIT
                 if artist_counts.get(artist_key, 0) >= artist_cap:
                     skipped_artist_cap += 1
                     continue
@@ -230,22 +251,22 @@ def ask_for_discovery_first_playlist(prompt: str, excluded_tracks=None) -> dict:
             # than a token cameo. Direct-anchor candidates are ordered ahead of the
             # broader pool and come from Last.fm top tracks, so use those as a
             # conservative popularity/recognition proxy when the model chose too few.
-            if anchor_key and not library_only:
+            if anchor_key and not library_only and not artist_blocked(anchor_name):
                 anchor_selected = sum(
                     1 for track in selected
-                    if str(track.get("artist") or "").casefold() == anchor_key
+                    if normalize_artist(track.get("artist", "")) == anchor_key
                 )
                 if anchor_selected < ANCHOR_MIN_TRACKS:
                     anchor_candidates = []
                     selected_keys = {
-                        (str(track.get("artist") or "").casefold(), str(track.get("title") or "").casefold())
+                        (normalize_artist(track.get("artist", "")), str(track.get("title") or "").casefold())
                         for track in selected
                     }
                     for row in external_candidates:
                         artist = str(row.get("artist") or "").strip()
                         title = str(row.get("title") or "").strip()
-                        key = (artist.casefold(), title.casefold())
-                        if artist.casefold() == anchor_key and title and key not in selected_keys:
+                        key = (normalize_artist(artist), title.casefold())
+                        if normalize_artist(artist) == anchor_key and title and key not in selected_keys:
                             anchor_candidates.append({
                                 "artist": artist,
                                 "title": title,
@@ -266,8 +287,9 @@ def ask_for_discovery_first_playlist(prompt: str, excluded_tracks=None) -> dict:
             local_count = sum(1 for track in selected if track.get("source") == "local")
             discovered_count = len(selected) - local_count
             print(
-                f"[Tune Raider] accepted {len(selected)} tracks: {discovered_count} discovered + {local_count} local specimens; "
-                f"skipped {skipped_local} local over discovery cap, {skipped_artist_cap} over artist cap",
+                f"[Tune Raider] accepted {len(selected)} tracks across {len({normalize_artist(t.get('artist', '')) for t in selected})} artists: "
+                f"{discovered_count} discovered + {local_count} local specimens; skipped {skipped_local} local over discovery cap, "
+                f"{skipped_artist_cap} over artist cap, {skipped_blocked} blocked",
                 flush=True,
             )
 
