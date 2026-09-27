@@ -11,6 +11,7 @@ import artist_similarity_integration  # noqa: F401,E402
 import discovery_first_integration  # noqa: F401,E402
 import prompt_ideas_enrichment  # noqa: F401,E402
 import run_app  # noqa: E402
+import playlist_prompt_tags  # noqa: F401,E402
 import refinement_context  # noqa: F401,E402
 import refinement_learning  # noqa: F401,E402
 import regeneration_context  # noqa: F401,E402
@@ -18,6 +19,7 @@ import live_iteration_sync  # noqa: F401,E402
 import playlist_additions  # noqa: F401,E402
 import add_to_ui  # noqa: F401,E402
 import task_progress_ui  # noqa: F401,E402
+import playlist_prompt_tags_ui  # noqa: F401,E402
 
 
 if __name__ == "__main__":
