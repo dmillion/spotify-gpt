@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 import re
 
+from flask import jsonify
+
 import run_app
 
 tr = run_app.tone_raider
@@ -98,15 +100,34 @@ def expand_playlist_tags(prompt: str) -> str:
         f"[Tune Raider] prompt references {len(contexts)} saved playlist(s): {sorted(seen_ids)}",
         flush=True,
     )
-    return (
-        cleaned
-        + "\n\nSAVED PLAYLIST REFERENCE CONTEXT\n"
-        + "\n\n".join(contexts)
-    )
+    return cleaned + "\n\nSAVED PLAYLIST REFERENCE CONTEXT\n" + "\n\n".join(contexts)
 
 
 def ask_with_playlist_tags(prompt: str, excluded_tracks=None) -> dict:
     return _original_ask(expand_playlist_tags(prompt), excluded_tracks)
+
+
+@tr.app.get("/api/prompt-playlists")
+def prompt_playlists():
+    """Compact saved-playlist index used by the @ mention picker."""
+    with tr.database() as connection:
+        rows = connection.execute(
+            "SELECT id, name, description, created_at, tracks FROM generated_playlists ORDER BY id DESC"
+        ).fetchall()
+    result = []
+    for row in rows:
+        try:
+            track_count = len(json.loads(row["tracks"]) or [])
+        except (TypeError, ValueError):
+            track_count = 0
+        result.append({
+            "id": row["id"],
+            "name": row["name"],
+            "description": row["description"],
+            "created_at": row["created_at"],
+            "track_count": track_count,
+        })
+    return jsonify(result)
 
 
 tr.ask_for_hybrid_playlist = ask_with_playlist_tags
