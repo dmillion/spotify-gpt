@@ -17,6 +17,7 @@ import regeneration_context  # noqa: F401,E402
 import live_iteration_sync  # noqa: F401,E402
 import playlist_additions  # noqa: F401,E402
 import add_to_ui  # noqa: F401,E402
+import task_progress_ui  # noqa: F401,E402
 
 
 if __name__ == "__main__":
