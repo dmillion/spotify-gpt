@@ -4,6 +4,13 @@ from __future__ import annotations
 import re
 
 
+def ensure_playlist_read_scope(spotify) -> None:
+    scopes = str(getattr(spotify, "SCOPES", "") or "").split()
+    if "playlist-read-private" not in scopes:
+        scopes.append("playlist-read-private")
+        spotify.SCOPES = " ".join(scopes)
+
+
 def playlist_id_from_url(value: str) -> str:
     text = str(value or "").strip()
     match = re.search(r"open\.spotify\.com/playlist/([A-Za-z0-9]+)", text)
