@@ -5,9 +5,10 @@ from __future__ import annotations
 
 import os
 
-# Install enrichment/similarity hooks before run_app captures app-level functions.
+# Install enrichment/similarity/discovery hooks before run_app captures app-level functions.
 import musicbrainz_integration  # noqa: F401,E402
 import artist_similarity_integration  # noqa: F401,E402
+import discovery_first_integration  # noqa: F401,E402
 import prompt_ideas_enrichment  # noqa: F401,E402
 import run_app  # noqa: E402
 
