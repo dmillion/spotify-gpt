@@ -1,8 +1,6 @@
 (() => {
   const TASKS = {
     generate: {
-      eyebrow: 'NEW PLAYLIST',
-      title: 'Building a fresh discovery set',
       status: 'GENERATING NEW PLAYLIST',
       stages: [
         ['INTERPRETING PROMPT', 'Mapping the artist, sound, mood, and constraints.'],
@@ -14,8 +12,6 @@
       ],
     },
     regenerate: {
-      eyebrow: 'REGENERATE',
-      title: 'Trying the original prompt again from scratch',
       status: 'REGENERATING FROM ORIGINAL PROMPT',
       stages: [
         ['RESETTING THE SEARCH', 'Starting a fresh discovery pass from the original prompt.'],
@@ -27,8 +23,6 @@
       ],
     },
     refine: {
-      eyebrow: 'REFINE',
-      title: 'Iterating on the current playlist',
       status: 'REFINING CURRENT PLAYLIST',
       stages: [
         ['READING LIVE SPOTIFY STATE', 'Scanning the playlist for manual additions and removals.'],
@@ -41,8 +35,6 @@
       ],
     },
     add: {
-      eyebrow: 'ADD TO',
-      title: 'Expanding playlist',
       status: 'EXPANDING CURRENT PLAYLIST',
       stages: [
         ['READING LIVE SPOTIFY STATE', 'Scanning the playlist before adding anything new.'],
@@ -81,7 +73,7 @@
         display:none;
         overflow:hidden;
         margin:-10px 0 32px;
-        padding:18px 20px 17px;
+        padding:16px 20px 15px;
         border:1px solid color-mix(in srgb,var(--acid) 58%,var(--line-strong));
         border-left:3px solid var(--warm-accent,var(--red));
         background:linear-gradient(105deg,color-mix(in srgb,var(--accent-deeper,var(--control)) 86%,var(--control)),var(--surface));
@@ -112,50 +104,11 @@
         pointer-events:none;
       }
       @keyframes task-scan { to { transform:translateX(470%); } }
-      .task-progress-head {
-        display:grid;
-        grid-template-columns:auto 1fr auto;
-        gap:12px;
-        align-items:center;
-      }
-      .task-progress-beacon {
-        width:13px;
-        height:13px;
-        border:1px solid var(--acid);
-        border-radius:50%;
-        background:var(--acid);
-        box-shadow:0 0 0 0 color-mix(in srgb,var(--acid) 45%,transparent),0 0 12px color-mix(in srgb,var(--acid) 65%,transparent);
-      }
-      .is-active .task-progress-beacon { animation:task-beacon 1.35s ease-out infinite; }
-      @keyframes task-beacon {
-        0% { box-shadow:0 0 0 0 color-mix(in srgb,var(--acid) 45%,transparent),0 0 10px color-mix(in srgb,var(--acid) 60%,transparent); }
-        72%,100% { box-shadow:0 0 0 9px transparent,0 0 18px color-mix(in srgb,var(--acid) 32%,transparent); }
-      }
-      .task-progress-eyebrow {
-        color:var(--warm-accent,var(--red));
-        font:500 11px/1.2 'DM Mono',monospace;
-        letter-spacing:.09em;
-        text-transform:uppercase;
-      }
-      .task-progress-title {
-        margin-top:4px;
-        color:var(--ink);
-        font:600 clamp(17px,2vw,23px)/1.15 'Space Grotesk',sans-serif;
-      }
-      .task-progress-elapsed {
-        min-width:54px;
-        text-align:right;
-        color:var(--muted);
-        font:500 11px 'DM Mono',monospace;
-      }
       .task-progress-stage {
         display:grid;
-        grid-template-columns:minmax(160px,.62fr) minmax(0,1fr);
-        gap:14px;
+        grid-template-columns:minmax(210px,.62fr) minmax(0,1fr) auto;
+        gap:16px;
         align-items:baseline;
-        margin-top:16px;
-        padding-top:13px;
-        border-top:1px solid color-mix(in srgb,var(--line-strong) 58%,transparent);
       }
       .task-progress-stage-name {
         color:var(--acid);
@@ -165,6 +118,12 @@
       .task-progress-detail {
         color:var(--muted);
         font:13px/1.45 'Space Grotesk',sans-serif;
+      }
+      .task-progress-elapsed {
+        min-width:54px;
+        text-align:right;
+        color:var(--muted);
+        font:500 11px 'DM Mono',monospace;
       }
       .task-progress-rail {
         position:relative;
@@ -183,18 +142,15 @@
       .is-active .task-progress-rail > span { animation:task-runner 1.55s ease-in-out infinite alternate; }
       @keyframes task-runner { from { transform:translateX(-20%); } to { transform:translateX(365%); } }
       .task-progress.is-complete { border-left-color:var(--acid); }
-      .task-progress.is-complete .task-progress-beacon { background:var(--acid); }
       .task-progress.is-error { border-left-color:var(--red); }
-      .task-progress.is-error .task-progress-beacon { background:var(--red); border-color:var(--red); }
       .task-progress.is-error .task-progress-stage-name { color:var(--red); }
       @media (max-width:700px) {
-        .task-progress { margin-top:-6px; padding:15px 14px; }
-        .task-progress-head { grid-template-columns:auto 1fr; }
-        .task-progress-elapsed { grid-column:2; text-align:left; }
-        .task-progress-stage { grid-template-columns:1fr; gap:5px; }
+        .task-progress { margin-top:-6px; padding:14px; }
+        .task-progress-stage { grid-template-columns:1fr auto; gap:5px 12px; }
+        .task-progress-detail { grid-column:1 / -1; }
       }
       @media (prefers-reduced-motion:reduce) {
-        .task-progress::after,.task-progress-beacon,.task-progress-rail > span { animation:none !important; }
+        .task-progress::after,.task-progress-rail > span { animation:none !important; }
       }
     `;
     document.head.appendChild(style);
@@ -210,17 +166,10 @@
     panel.setAttribute('role', 'status');
     panel.setAttribute('aria-live', 'polite');
     panel.innerHTML = `
-      <div class="task-progress-head">
-        <span class="task-progress-beacon" aria-hidden="true"></span>
-        <div>
-          <div class="task-progress-eyebrow"></div>
-          <div class="task-progress-title"></div>
-        </div>
-        <div class="task-progress-elapsed">0:00</div>
-      </div>
       <div class="task-progress-stage">
         <div class="task-progress-stage-name"></div>
         <div class="task-progress-detail"></div>
+        <div class="task-progress-elapsed">0:00</div>
       </div>
       <div class="task-progress-rail" aria-hidden="true"><span></span></div>
     `;
@@ -252,8 +201,6 @@
     if (elapsedTimer) window.clearInterval(elapsedTimer);
     startedAt = Date.now();
     panel.className = 'task-progress is-active';
-    panel.querySelector('.task-progress-eyebrow').textContent = task.eyebrow;
-    panel.querySelector('.task-progress-title').textContent = task.title;
     panel.querySelector('.task-progress-elapsed').textContent = '0:00';
     setStage(panel, task, 0);
 
