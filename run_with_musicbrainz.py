@@ -11,6 +11,7 @@ import artist_similarity_integration  # noqa: F401,E402
 import discovery_first_integration  # noqa: F401,E402
 import prompt_ideas_enrichment  # noqa: F401,E402
 import run_app  # noqa: E402
+import refinement_context  # noqa: F401,E402
 
 
 if __name__ == "__main__":
