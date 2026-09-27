@@ -11,9 +11,8 @@ import run_app
 tr = run_app.tone_raider
 _original_ask = tr.ask_for_hybrid_playlist
 
-# Human-readable textarea token inserted by the UI.
-# Example: @[Riverboat Soul Party](playlist:42)
-TAG_RE = re.compile(r"@\[(?P<name>[^\]]+)\]\(playlist:(?P<id>\d+)\)")
+# Readable textarea tag. Example: @[Riverboat Soul Party]
+TAG_RE = re.compile(r"@\[(?P<name>[^\]]+)\](?:\(playlist:(?P<id>\d+)\))?")
 
 
 def _stored_tracks(row) -> list[dict]:
@@ -24,7 +23,6 @@ def _stored_tracks(row) -> list[dict]:
 
 
 def _live_tracks(row) -> list[dict]:
-    """Prefer the current Spotify playlist state, but never make tags depend on it."""
     spotify_url = str(row["spotify_url"] or "").strip()
     if not spotify_url:
         return []
@@ -42,15 +40,21 @@ def _live_tracks(row) -> list[dict]:
         return []
 
 
-def _playlist_context(playlist_id: int, display_name: str) -> str | None:
+def _row_for_tag(name: str, playlist_id: str | None):
     with tr.database() as connection:
-        row = connection.execute(
-            "SELECT * FROM generated_playlists WHERE id = ?",
-            (playlist_id,),
+        if playlist_id:
+            return connection.execute(
+                "SELECT * FROM generated_playlists WHERE id = ?", (int(playlist_id),)
+            ).fetchone()
+        return connection.execute(
+            "SELECT * FROM generated_playlists WHERE name = ? COLLATE NOCASE ORDER BY id DESC LIMIT 1",
+            (name,),
         ).fetchone()
+
+
+def _playlist_context(row, display_name: str) -> str | None:
     if not row:
         return None
-
     tracks = _live_tracks(row) or _stored_tracks(row)
     track_lines = [
         f"- {str(track.get('artist') or '').strip()} - {str(track.get('title') or '').strip()}"
@@ -58,14 +62,11 @@ def _playlist_context(playlist_id: int, display_name: str) -> str | None:
         if track.get("artist") and track.get("title")
     ]
     name = str(row["name"] or display_name).strip()
-    description = str(row["description"] or "").strip()
-    original_prompt = str(row["prompt"] or "").strip()
-
     parts = [f"Referenced saved playlist: {name}"]
-    if description:
-        parts.append(f"Playlist description: {description}")
-    if original_prompt:
-        parts.append(f"Original playlist prompt: {original_prompt}")
+    if row["description"]:
+        parts.append(f"Playlist description: {row['description']}")
+    if row["prompt"]:
+        parts.append(f"Original playlist prompt: {row['prompt']}")
     if track_lines:
         parts.append("Current playlist tracks:\n" + "\n".join(track_lines))
     parts.append(
@@ -82,13 +83,13 @@ def expand_playlist_tags(prompt: str) -> str:
         return text
 
     contexts = []
-    seen_ids = set()
+    seen = set()
     for match in matches:
-        playlist_id = int(match.group("id"))
-        if playlist_id in seen_ids:
+        row = _row_for_tag(match.group("name"), match.group("id"))
+        if not row or row["id"] in seen:
             continue
-        seen_ids.add(playlist_id)
-        context = _playlist_context(playlist_id, match.group("name"))
+        seen.add(row["id"])
+        context = _playlist_context(row, match.group("name"))
         if context:
             contexts.append(context)
 
@@ -96,10 +97,7 @@ def expand_playlist_tags(prompt: str) -> str:
     if not contexts:
         return cleaned
 
-    print(
-        f"[Tune Raider] prompt references {len(contexts)} saved playlist(s): {sorted(seen_ids)}",
-        flush=True,
-    )
+    print(f"[Tune Raider] prompt references {len(contexts)} saved playlist(s): {sorted(seen)}", flush=True)
     return cleaned + "\n\nSAVED PLAYLIST REFERENCE CONTEXT\n" + "\n\n".join(contexts)
 
 
@@ -109,7 +107,6 @@ def ask_with_playlist_tags(prompt: str, excluded_tracks=None) -> dict:
 
 @tr.app.get("/api/prompt-playlists")
 def prompt_playlists():
-    """Compact saved-playlist index used by the @ mention picker."""
     with tr.database() as connection:
         rows = connection.execute(
             "SELECT id, name, description, created_at, tracks FROM generated_playlists ORDER BY id DESC"
@@ -121,11 +118,8 @@ def prompt_playlists():
         except (TypeError, ValueError):
             track_count = 0
         result.append({
-            "id": row["id"],
-            "name": row["name"],
-            "description": row["description"],
-            "created_at": row["created_at"],
-            "track_count": track_count,
+            "id": row["id"], "name": row["name"], "description": row["description"],
+            "created_at": row["created_at"], "track_count": track_count,
         })
     return jsonify(result)
 
