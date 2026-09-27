@@ -9,54 +9,15 @@
 
   const style = document.createElement('style');
   style.textContent = `
-    .playlist-mention-help {
-      margin:8px 0 0;
-      color:var(--muted);
-      font:500 10px/1.4 'DM Mono',monospace;
-      letter-spacing:.03em;
-      text-transform:uppercase;
-    }
+    .playlist-mention-help { margin:8px 0 0; color:var(--muted); font:500 10px/1.4 'DM Mono',monospace; letter-spacing:.03em; text-transform:uppercase; }
     .playlist-mention-help code { color:var(--accent-mid,var(--acid)); font:inherit; }
-    .playlist-mention-menu {
-      position:fixed;
-      z-index:1000;
-      display:none;
-      width:min(540px,calc(100vw - 28px));
-      max-height:290px;
-      overflow:auto;
-      border:1px solid var(--line-strong);
-      background:var(--surface);
-      box-shadow:0 12px 35px rgba(0,0,0,.35);
-      padding:5px;
-    }
+    .playlist-mention-menu { position:fixed; z-index:1000; display:none; width:min(540px,calc(100vw - 28px)); max-height:290px; overflow:auto; border:1px solid var(--line-strong); background:var(--surface); box-shadow:0 12px 35px rgba(0,0,0,.35); padding:5px; }
     .playlist-mention-menu.is-open { display:block; }
-    .playlist-mention-item {
-      display:grid;
-      grid-template-columns:minmax(0,1fr) auto;
-      gap:5px 12px;
-      width:100%;
-      padding:10px 11px;
-      border:0;
-      background:transparent;
-      color:var(--ink);
-      text-align:left;
-      font:500 12px/1.35 'DM Mono',monospace;
-    }
-    .playlist-mention-item:hover,
-    .playlist-mention-item.is-active {
-      background:color-mix(in srgb,var(--accent-deep,var(--acid)) 34%,var(--control));
-      color:var(--acid);
-    }
+    .playlist-mention-item { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:5px 12px; width:100%; padding:10px 11px; border:0; background:transparent; color:var(--ink); text-align:left; font:500 12px/1.35 'DM Mono',monospace; }
+    .playlist-mention-item:hover,.playlist-mention-item.is-active { background:color-mix(in srgb,var(--accent-deep,var(--acid)) 34%,var(--control)); color:var(--acid); }
     .playlist-mention-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .playlist-mention-count { color:var(--warm-accent,var(--muted)); white-space:nowrap; }
-    .playlist-mention-desc {
-      grid-column:1 / -1;
-      color:var(--muted);
-      font-size:10px;
-      overflow:hidden;
-      text-overflow:ellipsis;
-      white-space:nowrap;
-    }
+    .playlist-mention-desc { grid-column:1 / -1; color:var(--muted); font-size:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   `;
   document.head.appendChild(style);
 
@@ -92,28 +53,20 @@
 
   function render() {
     const mention = currentMention();
-    if (!mention || !playlists.length) {
-      close();
-      return;
-    }
+    if (!mention || !playlists.length) return close();
     mentionStart = mention.start;
     matches = playlists.filter(item => {
       if (!mention.query) return true;
-      const haystack = `${item.name} ${item.description || ''}`.toLowerCase();
-      return haystack.includes(mention.query);
+      return `${item.name} ${item.description || ''}`.toLowerCase().includes(mention.query);
     }).slice(0, 10);
-    if (!matches.length) {
-      close();
-      return;
-    }
+    if (!matches.length) return close();
     activeIndex = Math.min(activeIndex, matches.length - 1);
     menu.innerHTML = matches.map((item, index) => `
       <button type="button" class="playlist-mention-item${index === activeIndex ? ' is-active' : ''}" data-index="${index}" role="option" aria-selected="${index === activeIndex}">
         <span class="playlist-mention-name">${escapeHtml(item.name)}</span>
         <span class="playlist-mention-count">${item.track_count || 0} tracks</span>
         <span class="playlist-mention-desc">${escapeHtml(item.description || 'Saved Tune Raider playlist')}</span>
-      </button>
-    `).join('');
+      </button>`).join('');
     positionMenu();
     menu.classList.add('is-open');
   }
@@ -136,7 +89,8 @@
     const cursor = prompt.selectionStart ?? prompt.value.length;
     const before = prompt.value.slice(0, mentionStart);
     const after = prompt.value.slice(cursor);
-    const token = `@[${item.name}]`;
+    const duplicates = playlists.filter(row => String(row.name).toLowerCase() === String(item.name).toLowerCase()).length;
+    const token = duplicates > 1 ? `@[${item.name}](playlist:${item.id})` : `@[${item.name}]`;
     const spacer = after && !/^\s/.test(after) ? ' ' : '';
     prompt.value = `${before}${token}${spacer}${after}`;
     const next = before.length + token.length + spacer.length;
@@ -150,21 +104,10 @@
   prompt.addEventListener('click', render);
   prompt.addEventListener('keydown', event => {
     if (!menu.classList.contains('is-open')) return;
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      activeIndex = (activeIndex + 1) % matches.length;
-      render();
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      activeIndex = (activeIndex - 1 + matches.length) % matches.length;
-      render();
-    } else if (event.key === 'Enter' || event.key === 'Tab') {
-      event.preventDefault();
-      choose(activeIndex);
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
-      close();
-    }
+    if (event.key === 'ArrowDown') { event.preventDefault(); activeIndex = (activeIndex + 1) % matches.length; render(); }
+    else if (event.key === 'ArrowUp') { event.preventDefault(); activeIndex = (activeIndex - 1 + matches.length) % matches.length; render(); }
+    else if (event.key === 'Enter' || event.key === 'Tab') { event.preventDefault(); choose(activeIndex); }
+    else if (event.key === 'Escape') { event.preventDefault(); close(); }
   });
 
   menu.addEventListener('mousedown', event => {
@@ -173,9 +116,7 @@
     event.preventDefault();
     choose(Number(item.dataset.index || 0));
   });
-  document.addEventListener('mousedown', event => {
-    if (event.target !== prompt && !menu.contains(event.target)) close();
-  });
+  document.addEventListener('mousedown', event => { if (event.target !== prompt && !menu.contains(event.target)) close(); });
   window.addEventListener('resize', () => menu.classList.contains('is-open') && positionMenu());
   window.addEventListener('scroll', () => menu.classList.contains('is-open') && positionMenu(), true);
 
