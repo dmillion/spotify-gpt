@@ -55,12 +55,7 @@ def _excluded_keys(excluded_tracks) -> set[tuple[str, str]]:
 
 
 def _prompt_track_request(prompt: str) -> spotify.TrackRequest | None:
-    """Extract common explicit `track by artist` inspiration phrasing.
-
-    This intentionally stays conservative: it is only a fallback when the local
-    library could not identify an anchor, and the Spotify resolver must still find
-    a sufficiently close canonical match before anything is inserted.
-    """
+    """Extract common explicit `track by artist` inspiration phrasing."""
     text = " ".join(str(prompt or "").split())
     if not text:
         return None
@@ -81,15 +76,46 @@ def _prompt_track_request(prompt: str) -> spotify.TrackRequest | None:
     return None
 
 
+def _prompt_artist_name(prompt: str) -> str | None:
+    """Extract a clearly named artist from common inspiration phrasing.
+
+    The result is only a candidate. Spotify must still confirm an exact artist
+    match before Tune Raider inserts one of that artist's tracks.
+    """
+    text = " ".join(str(prompt or "").split())
+    if not text:
+        return None
+
+    patterns = [
+        r"(?:songs?|tracks?|music|stuff|artists?)\s+(?:more\s+)?like\s+(?P<artist>.+?)(?=\s*(?:[,.;]|\b(?:with|for|but|that|which|where|and\s+(?:keep|make|favor|lean|avoid))\b)|$)",
+        r"(?:start|starting|begin|anchor)\s+(?:with|from|on)\s+(?P<artist>.+?)(?=\s*(?:[,.;]|\b(?:with|for|but|that|which|where|and\s+(?:then|branch|build|move|keep))\b)|$)",
+        r"(?:inspired\s+by|based\s+on|around)\s+(?P<artist>.+?)(?=\s*(?:[,.;]|\b(?:with|for|but|that|which|where|and\s+(?:keep|make|favor|lean|avoid))\b)|$)",
+        r"(?:give|find|show)\s+me\s+(?:more\s+)?(?P<artist>[A-Z0-9][^,;]{1,80}?)(?=\s*(?:[,.;]|\b(?:songs?|tracks?|music)\b)|$)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if not match:
+            continue
+        artist = match.group("artist").strip(" \"'“”‘’")
+        artist = re.sub(r"^(?:some|more)\s+", "", artist, flags=re.IGNORECASE).strip()
+        if artist and 2 <= len(artist) <= 120:
+            return artist
+    return None
+
+
+def _spotify_token() -> str | None:
+    token_info = spotify.load_token()
+    if not token_info or not spotify.token_has_required_scopes(token_info):
+        return None
+    return str(token_info.get("access_token") or "").strip() or None
+
+
 def _spotify_prompt_anchor(prompt: str) -> dict | None:
     requested = _prompt_track_request(prompt)
     if not requested:
         return None
 
-    token_info = spotify.load_token()
-    if not token_info or not spotify.token_has_required_scopes(token_info):
-        return None
-    token = str(token_info.get("access_token") or "").strip()
+    token = _spotify_token()
     if not token:
         return None
 
@@ -106,6 +132,50 @@ def _spotify_prompt_anchor(prompt: str) -> dict | None:
     if not artist or not title:
         return None
     return {"artist": artist, "title": title, "genre": "", "anchor_type": "song", "source": "spotify-anchor"}
+
+
+def _spotify_artist_anchor(prompt: str, excluded_tracks=None) -> dict | None:
+    """Resolve an explicitly prompted artist to one Spotify track when possible."""
+    artist_name = _prompt_artist_name(prompt)
+    token = _spotify_token()
+    if not artist_name or not token:
+        return None
+
+    try:
+        response = spotify.api_request(
+            "GET",
+            "/search",
+            token,
+            params={"q": f'artist:"{artist_name}"', "type": "track", "limit": 10},
+        )
+        items = response.json().get("tracks", {}).get("items", [])
+    except Exception:
+        return None
+
+    requested_key = _normalize(artist_name)
+    excluded = _excluded_keys(excluded_tracks)
+    exact = []
+    for item in items:
+        artists = item.get("artists") or []
+        canonical = str((artists[0] if artists else {}).get("name") or "").strip()
+        title = str(item.get("name") or "").strip()
+        if not canonical or not title or _normalize(canonical) != requested_key:
+            continue
+        if (_normalize(canonical), _normalize(title)) in excluded:
+            continue
+        exact.append((canonical, title, int(item.get("popularity") or 0)))
+
+    if not exact:
+        return None
+    exact.sort(key=lambda row: row[2], reverse=True)
+    canonical, title, _ = exact[0]
+    return {
+        "artist": canonical,
+        "title": title,
+        "genre": "",
+        "anchor_type": "artist",
+        "source": "spotify-artist-anchor",
+    }
 
 
 def _find_anchor(prompt: str, tracks: list[dict], excluded_tracks=None) -> dict | None:
@@ -141,9 +211,6 @@ def _find_anchor(prompt: str, tracks: list[dict], excluded_tracks=None) -> dict 
         return {**song_matches[0], "anchor_type": "song", "source": "local-anchor"}
 
     if artist_mentions:
-        # Prefer the longest explicit artist name so a specific name wins over a
-        # shorter substring-like artist name. For regeneration, choose a different
-        # track by that artist when possible before allowing a previous track back in.
         artist_key = max(artist_mentions, key=len)
         artist_tracks = [track for track in tracks if _normalize(track["artist"]) == artist_key]
         excluded = _excluded_keys(excluded_tracks)
@@ -155,9 +222,10 @@ def _find_anchor(prompt: str, tracks: list[dict], excluded_tracks=None) -> dict 
         if chosen:
             return {**chosen, "anchor_type": "artist", "source": "local-anchor"}
 
-    # The inspiration track may not exist in the local MP3 library. If the prompt
-    # explicitly says "Track by Artist", try Spotify before giving up on the anchor.
-    return _spotify_prompt_anchor(prompt)
+    # If a specific track was named, resolve that first. Otherwise, if the prompt
+    # clearly names an inspiration artist that is absent from the local library,
+    # require Spotify to confirm that exact artist and insert one representative track.
+    return _spotify_prompt_anchor(prompt) or _spotify_artist_anchor(prompt, excluded_tracks)
 
 
 def _description_mentions_missing_entity(description: str, selected: list[dict], catalog: list[dict]) -> bool:
@@ -167,10 +235,6 @@ def _description_mentions_missing_entity(description: str, selected: list[dict],
 
     selected_artists = {_normalize(track.get("artist")) for track in selected}
     selected_titles = {_normalize(track.get("title")) for track in selected}
-
-    # Catch references to known catalog artists/tracks that are not actually in
-    # the final curated track list. Long names are checked first to avoid substring
-    # ambiguity with shorter artist names.
     catalog_artists = sorted({_normalize(track["artist"]) for track in catalog if track.get("artist")}, key=len, reverse=True)
     catalog_titles = sorted({_normalize(track["title"]) for track in catalog if track.get("title")}, key=len, reverse=True)
     padded = f" {normalized_description} "
@@ -182,10 +246,6 @@ def _description_mentions_missing_entity(description: str, selected: list[dict],
         if len(title) >= 8 and title not in selected_titles and f" {title} " in padded:
             return True
 
-    # Also catch the most common hallucinated attribution even when that artist is
-    # not in the local catalog: "anchored by X", "featuring X", etc. If the named
-    # phrase does not match any selected artist, discard the description rather than
-    # claim the playlist contains something it does not.
     for pattern in (
         r"\banchored\s+by\s+([^,.]+)",
         r"\bfeaturing\s+([^,.]+)",
@@ -209,8 +269,6 @@ def _ground_description(generated: dict, catalog: list[dict]) -> dict:
     if not _description_mentions_missing_entity(description, selected, catalog):
         return generated
 
-    # Do not invent a replacement artist/track attribution. Keep the description
-    # useful but entity-neutral when the model referenced something it did not pick.
     generated["description"] = "A curated playlist built around the requested sound, with musically adjacent picks chosen from the final track set."
     print("[Tune Raider] replaced ungrounded playlist description", flush=True)
     return generated
@@ -225,12 +283,7 @@ def ensure_prompt_anchor(
     track_limit: int = 20,
     artist_limit: int = 2,
 ) -> dict:
-    """Guarantee a resolvable prompt inspiration survives curation when possible.
-
-    The model remains responsible for sequencing and musical judgment. This only
-    intervenes when an explicitly named local or Spotify-resolvable artist/song is
-    missing, then validates that the description does not name absent catalog items.
-    """
+    """Guarantee a resolvable prompt inspiration survives curation when possible."""
     tracks = _load_tracks(database_path)
     anchor = _find_anchor(prompt, tracks, excluded_tracks)
     selected = list(generated.get("tracks") or [])
@@ -250,8 +303,6 @@ def ensure_prompt_anchor(
             present = any(_normalize(track.get("artist")) == anchor_artist for track in selected)
 
         if not present:
-            # Keep the hard artist cap intact. For an explicitly named song, remove
-            # one existing track by that artist if needed before inserting the anchor.
             same_artist_indexes = [
                 index for index, track in enumerate(selected)
                 if _normalize(track.get("artist")) == anchor_artist
