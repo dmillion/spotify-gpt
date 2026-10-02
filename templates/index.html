@@ -63,20 +63,19 @@
   <div class="status" id="status" role="status"></div>
   <p id="error-help" hidden><a id="error-help-link" target="_blank" rel="noopener noreferrer">Open OpenAI settings ↗</a></p>
   </div>
-  <section class="usage" aria-labelledby="usage-title">
-    <h2 id="usage-title">OpenAI usage</h2>
-    <div class="usage-grid">
-      <div><span class="meta">Total recorded</span><strong class="usage-value" id="usage-total">—</strong></div>
-      <div><span class="meta">Today (UTC)</span><strong class="usage-value" id="usage-today">—</strong></div>
-      <div><span class="meta">Input tokens</span><strong class="usage-value" id="usage-input">—</strong></div>
-      <div><span class="meta">Output tokens</span><strong class="usage-value" id="usage-output">—</strong></div>
+  <details class="usage">
+    <summary class="usage-summary">AI usage</summary>
+    <div class="usage-body">
+      <div class="usage-grid">
+        <div><span class="meta">Total recorded</span><strong class="usage-value" id="usage-total">—</strong></div>
+        <div><span class="meta">Today (UTC)</span><strong class="usage-value" id="usage-today">—</strong></div>
+        <div><span class="meta">Input tokens</span><strong class="usage-value" id="usage-input">—</strong></div>
+        <div><span class="meta">Output tokens</span><strong class="usage-value" id="usage-output">—</strong></div>
+      </div>
+      <div class="usage-bar" aria-hidden="true"><span class="usage-input" id="usage-input-bar"></span><span class="usage-output" id="usage-output-bar"></span></div>
+      <p class="usage-note" id="usage-detail" role="status">Loading usage…</p>
     </div>
-    <div class="usage-bar" aria-hidden="true"><span class="usage-input" id="usage-input-bar"></span><span class="usage-output" id="usage-output-bar"></span></div>
-    <details class="usage-details"><summary>Meter details</summary>
-    <p class="usage-note" id="usage-detail" role="status">Loading usage…</p>
-    <p class="usage-note">This app only, from when tracking was added. Earlier usage and requests with no usage response are excluded. Counts persist across restarts.</p>
-    </details>
-  </section>
+  </details>
   </div>
   <section class="history-panel"><div class="section-head"><h2>Recent builds</h2><span class="meta" id="count"></span></div><div class="history" id="history"><div class="empty">No playlists yet. Give the machine a mood.</div></div></section>
 </main>
