@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 import requests
 from flask import jsonify, render_template, request
@@ -46,6 +47,74 @@ def install(ns: dict) -> None:
                 "name": row["name"], "description": row["description"], "tracks": json.loads(row["tracks"]),
                 "spotify_url": row["spotify_url"], "created_at": row["created_at"]}
 
+    def _spotify_playlist_id(value: str | None) -> str:
+        match = re.search(r"open\\.spotify\\.com/playlist/([A-Za-z0-9]+)", str(value or ""))
+        return match.group(1) if match else ""
+
+    def _current_spotify_playlist_ids() -> set[str] | None:
+        """Silently return playlists visible to the cached Spotify account.
+
+        History loading must never launch OAuth. If the cached token is absent,
+        stale, or missing the private-playlist scope, leave local history alone.
+        """
+        token_info = spotify.load_token()
+        if not token_info or not spotify.token_has_required_scopes(token_info):
+            return None
+        token = str(token_info.get("access_token") or "").strip()
+        if not token:
+            return None
+
+        ids: set[str] = set()
+        offset = 0
+        try:
+            while True:
+                payload = spotify.api_request(
+                    "GET",
+                    "/me/playlists",
+                    token,
+                    params={"limit": 50, "offset": offset},
+                ).json()
+                items = payload.get("items") or []
+                for item in items:
+                    playlist_id = str((item or {}).get("id") or "").strip()
+                    if playlist_id:
+                        ids.add(playlist_id)
+                offset += len(items)
+                if not items or offset >= int(payload.get("total") or 0):
+                    break
+        except (requests.RequestException, spotify.SpotifyError):
+            return None
+        return ids
+
+    def _trim_deleted_spotify_history() -> int:
+        current_ids = _current_spotify_playlist_ids()
+        if current_ids is None:
+            return 0
+
+        with ns["database"]() as connection:
+            rows = connection.execute(
+                "SELECT id, spotify_url FROM generated_playlists WHERE spotify_url IS NOT NULL AND spotify_url != ''"
+            ).fetchall()
+            stale_ids = [
+                int(row["id"])
+                for row in rows
+                if _spotify_playlist_id(row["spotify_url"])
+                and _spotify_playlist_id(row["spotify_url"]) not in current_ids
+            ]
+            if stale_ids:
+                placeholders = ",".join("?" for _ in stale_ids)
+                connection.execute(
+                    f"DELETE FROM generated_playlists WHERE id IN ({placeholders})",
+                    stale_ids,
+                )
+
+        if stale_ids:
+            print(
+                f"[Tune Raider] history sync: removed {len(stale_ids)} build(s) no longer present in Spotify",
+                flush=True,
+            )
+        return len(stale_ids)
+
     @app.get("/")
     def home():
         return render_template("index.html", password_gate_enabled=bool(ns["APP_PASSWORD"]))
@@ -60,6 +129,7 @@ def install(ns: dict) -> None:
 
     @app.get("/api/history")
     def history():
+        _trim_deleted_spotify_history()
         with ns["database"]() as connection:
             rows = connection.execute("SELECT * FROM generated_playlists ORDER BY id DESC LIMIT 30").fetchall()
         return jsonify([row_to_result(row) for row in rows])
