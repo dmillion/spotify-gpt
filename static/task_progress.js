@@ -103,10 +103,10 @@
         align-items:center;
       }
       .task-progress-stage-main {
-        display:flex;
-        align-items:center;
-        gap:12px;
+        display:grid;
+        gap:6px;
         min-width:0;
+        justify-items:start;
       }
       .task-progress-stage-name {
         color:var(--acid);
@@ -122,11 +122,12 @@
       }
       .task-progress-dots {
         position:relative;
-        flex:0 0 92px;
-        width:92px;
-        height:10px;
+        width:104px;
+        height:12px;
         overflow:hidden;
-        opacity:.72;
+        border:1px solid color-mix(in srgb,var(--line-strong) 62%,transparent);
+        background:color-mix(in srgb,var(--control) 72%,transparent);
+        opacity:.78;
       }
       .task-progress-dot {
         position:absolute;
@@ -153,14 +154,14 @@
         12% { opacity:.75; }
         50% { transform:translateY(-50%) scale(1); }
         88% { opacity:.75; }
-        100% { left:96px; transform:translateY(-50%) scale(.8); }
+        100% { left:108px; transform:translateY(-50%) scale(.8); }
       }
       .task-progress.is-error .task-progress-stage-name { color:var(--red); }
       @media (max-width:700px) {
         .task-progress { margin-top:-6px; }
         .task-progress-stage { grid-template-columns:minmax(0,1fr) auto; gap:5px 12px; }
-        .task-progress-stage-main { gap:9px; }
-        .task-progress-dots { flex-basis:72px; width:72px; }
+        .task-progress-stage-main { gap:6px; }
+        .task-progress-dots { width:88px; }
       }
       @media (prefers-reduced-motion:reduce) {
         .task-progress-dot { animation:none !important; }
