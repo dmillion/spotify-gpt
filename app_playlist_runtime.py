@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import re
 from datetime import datetime, timezone
 import requests
 from flask import jsonify, render_template, request
@@ -48,8 +47,12 @@ def install(ns: dict) -> None:
                 "spotify_url": row["spotify_url"], "created_at": row["created_at"]}
 
     def _spotify_playlist_id(value: str | None) -> str:
-        match = re.search(r"open\\.spotify\\.com/playlist/([A-Za-z0-9]+)", str(value or ""))
-        return match.group(1) if match else ""
+        text = str(value or "").strip()
+        marker = "/playlist/"
+        if marker not in text:
+            return ""
+        playlist_id = text.split(marker, 1)[1].split("?", 1)[0].split("#", 1)[0].split("/", 1)[0].strip()
+        return playlist_id if playlist_id and playlist_id.isalnum() else ""
 
     def _current_spotify_playlist_ids() -> set[str] | None:
         """Silently return playlists visible to the cached Spotify account.
@@ -126,11 +129,11 @@ def install(ns: dict) -> None:
                     stale_ids,
                 )
 
-        if stale_ids:
-            print(
-                f"[Tune Raider] history sync: removed {len(stale_ids)} build(s) no longer present in Spotify",
-                flush=True,
-            )
+        print(
+            f"[Tune Raider] history sync: checked {len(rows)} local build(s), "
+            f"found {len(current_ids)} Spotify playlist(s), removed {len(stale_ids)} stale build(s)",
+            flush=True,
+        )
         return len(stale_ids)
 
     @app.get("/")
