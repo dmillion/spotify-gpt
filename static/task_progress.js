@@ -98,14 +98,21 @@
       .task-progress.is-error { display:block; }
       .task-progress-stage {
         display:grid;
-        grid-template-columns:minmax(210px,1fr) auto;
+        grid-template-columns:minmax(0,1fr) auto;
         gap:16px;
-        align-items:baseline;
+        align-items:center;
+      }
+      .task-progress-stage-main {
+        display:flex;
+        align-items:center;
+        gap:12px;
+        min-width:0;
       }
       .task-progress-stage-name {
         color:var(--acid);
         font:500 12px/1.4 'DM Mono',monospace;
         letter-spacing:.055em;
+        white-space:nowrap;
       }
       .task-progress-elapsed {
         min-width:54px;
@@ -115,39 +122,48 @@
       }
       .task-progress-dots {
         position:relative;
-        height:8px;
-        margin-top:10px;
+        flex:0 0 92px;
+        width:92px;
+        height:10px;
         overflow:hidden;
-        opacity:.7;
-        background:
-          radial-gradient(circle, color-mix(in srgb,var(--line-strong) 70%,transparent) 1px, transparent 1.5px)
-          left center / 18px 8px repeat-x;
+        opacity:.72;
       }
-      .task-progress-dots > span {
+      .task-progress-dot {
         position:absolute;
         top:50%;
-        left:0;
-        width:5px;
-        height:5px;
+        left:-8px;
+        width:4px;
+        height:4px;
         border-radius:50%;
         background:var(--acid);
         transform:translateY(-50%);
-        opacity:.8;
+        opacity:.16;
       }
-      .is-active .task-progress-dots > span {
-        animation:task-plod 11s steps(12,end) infinite;
+      .task-progress-dot:nth-child(2) { margin-left:-9px; opacity:.28; }
+      .task-progress-dot:nth-child(3) { margin-left:-18px; opacity:.45; }
+      .task-progress-dot:nth-child(4) { margin-left:-27px; opacity:.72; }
+      .is-active .task-progress-dot {
+        animation:task-plod 12s linear infinite;
       }
+      .is-active .task-progress-dot:nth-child(2) { animation-delay:.28s; }
+      .is-active .task-progress-dot:nth-child(3) { animation-delay:.56s; }
+      .is-active .task-progress-dot:nth-child(4) { animation-delay:.84s; }
       @keyframes task-plod {
-        from { left:0; }
-        to { left:calc(100% - 5px); }
+        0% { left:-8px; transform:translateY(-50%) scale(.8); }
+        12% { opacity:.75; }
+        50% { transform:translateY(-50%) scale(1); }
+        88% { opacity:.75; }
+        100% { left:96px; transform:translateY(-50%) scale(.8); }
       }
       .task-progress.is-error .task-progress-stage-name { color:var(--red); }
       @media (max-width:700px) {
         .task-progress { margin-top:-6px; }
-        .task-progress-stage { grid-template-columns:1fr auto; gap:5px 12px; }
+        .task-progress-stage { grid-template-columns:minmax(0,1fr) auto; gap:5px 12px; }
+        .task-progress-stage-main { gap:9px; }
+        .task-progress-dots { flex-basis:72px; width:72px; }
       }
       @media (prefers-reduced-motion:reduce) {
-        .task-progress-dots > span { animation:none !important; }
+        .task-progress-dot { animation:none !important; }
       }
     `;
     document.head.appendChild(style);
@@ -164,10 +180,17 @@
     panel.setAttribute('aria-live', 'polite');
     panel.innerHTML = `
       <div class="task-progress-stage">
-        <div class="task-progress-stage-name"></div>
+        <div class="task-progress-stage-main">
+          <div class="task-progress-stage-name"></div>
+          <div class="task-progress-dots" aria-hidden="true">
+            <span class="task-progress-dot"></span>
+            <span class="task-progress-dot"></span>
+            <span class="task-progress-dot"></span>
+            <span class="task-progress-dot"></span>
+          </div>
+        </div>
         <div class="task-progress-elapsed">0:00</div>
       </div>
-      <div class="task-progress-dots" aria-hidden="true"><span></span></div>
     `;
     const status = document.querySelector('#status');
     if (status?.parentNode) status.insertAdjacentElement('afterend', panel);
