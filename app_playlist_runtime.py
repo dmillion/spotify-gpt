@@ -58,7 +58,17 @@ def install(ns: dict) -> None:
         stale, or missing the private-playlist scope, leave local history alone.
         """
         token_info = spotify.load_token()
-        if not token_info or not spotify.token_has_required_scopes(token_info):
+        if not token_info:
+            print("[Tune Raider] history sync skipped: no cached Spotify token", flush=True)
+            return None
+        if not spotify.token_has_required_scopes(token_info):
+            granted = set(str(token_info.get("scope", "")).split())
+            missing = sorted(spotify.required_scopes() - granted)
+            print(
+                "[Tune Raider] history sync skipped: Spotify token missing scope(s): "
+                + ", ".join(missing),
+                flush=True,
+            )
             return None
         token = str(token_info.get("access_token") or "").strip()
         if not token:
