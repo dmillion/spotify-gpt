@@ -65,12 +65,20 @@ def install(ns: dict) -> None:
             granted = set(str(token_info.get("scope", "")).split())
             missing = sorted(spotify.required_scopes() - granted)
             print(
-                "[Tune Raider] history sync skipped: Spotify token missing scope(s): "
+                "[Tune Raider] Spotify authorization needs updated scope(s): "
                 + ", ".join(missing),
                 flush=True,
             )
-            return None
-        token = str(token_info.get("access_token") or "").strip()
+            # This is a one-time scope migration for existing installs. Refresh
+            # tokens cannot gain scopes, so use the normal PKCE authorization
+            # flow and resume this history request after it completes.
+            try:
+                token = spotify.get_access_token()
+            except (requests.RequestException, spotify.SpotifyError):
+                print("[Tune Raider] history sync skipped: Spotify reauthorization did not complete", flush=True)
+                return None
+        else:
+            token = str(token_info.get("access_token") or "").strip()
         if not token:
             return None
 
