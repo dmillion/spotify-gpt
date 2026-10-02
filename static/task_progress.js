@@ -120,51 +120,58 @@
         color:var(--muted);
         font:500 11px 'DM Mono',monospace;
       }
-      .task-progress-dots {
-        position:relative;
+      .task-progress-wave {
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        gap:4px;
         width:104px;
-        height:12px;
+        height:16px;
         overflow:hidden;
         border:1px solid color-mix(in srgb,var(--line-strong) 62%,transparent);
         background:color-mix(in srgb,var(--control) 72%,transparent);
         opacity:.78;
       }
-      .task-progress-dot {
-        position:absolute;
-        top:50%;
-        left:-8px;
-        width:4px;
+      .task-progress-wave > span {
+        width:3px;
         height:4px;
-        border-radius:50%;
+        border-radius:999px;
         background:var(--acid);
-        transform:translateY(-50%);
-        opacity:.16;
+        opacity:.28;
+        transform:scaleY(.7);
+        transform-origin:center;
       }
-      .task-progress-dot:nth-child(2) { margin-left:-9px; opacity:.28; }
-      .task-progress-dot:nth-child(3) { margin-left:-18px; opacity:.45; }
-      .task-progress-dot:nth-child(4) { margin-left:-27px; opacity:.72; }
-      .is-active .task-progress-dot {
-        animation:task-plod 12s linear infinite;
+      .is-active .task-progress-wave > span {
+        animation:task-wave 3.6s ease-in-out infinite;
       }
-      .is-active .task-progress-dot:nth-child(2) { animation-delay:.28s; }
-      .is-active .task-progress-dot:nth-child(3) { animation-delay:.56s; }
-      .is-active .task-progress-dot:nth-child(4) { animation-delay:.84s; }
-      @keyframes task-plod {
-        0% { left:-8px; transform:translateY(-50%) scale(.8); }
-        12% { opacity:.75; }
-        50% { transform:translateY(-50%) scale(1); }
-        88% { opacity:.75; }
-        100% { left:108px; transform:translateY(-50%) scale(.8); }
+      .is-active .task-progress-wave > span:nth-child(2) { animation-delay:.18s; }
+      .is-active .task-progress-wave > span:nth-child(3) { animation-delay:.36s; }
+      .is-active .task-progress-wave > span:nth-child(4) { animation-delay:.54s; }
+      .is-active .task-progress-wave > span:nth-child(5) { animation-delay:.72s; }
+      .is-active .task-progress-wave > span:nth-child(6) { animation-delay:.90s; }
+      .is-active .task-progress-wave > span:nth-child(7) { animation-delay:1.08s; }
+      .is-active .task-progress-wave > span:nth-child(8) { animation-delay:1.26s; }
+      @keyframes task-wave {
+        0%,100% {
+          height:4px;
+          opacity:.22;
+          transform:scaleY(.7);
+        }
+        50% {
+          height:11px;
+          opacity:.68;
+          transform:scaleY(1);
+        }
       }
       .task-progress.is-error .task-progress-stage-name { color:var(--red); }
       @media (max-width:700px) {
         .task-progress { margin-top:-6px; }
         .task-progress-stage { grid-template-columns:minmax(0,1fr) auto; gap:5px 12px; }
         .task-progress-stage-main { gap:6px; }
-        .task-progress-dots { width:88px; }
+        .task-progress-wave { width:88px; }
       }
       @media (prefers-reduced-motion:reduce) {
-        .task-progress-dot { animation:none !important; }
+        .task-progress-wave > span { animation:none !important; }
       }
     `;
     document.head.appendChild(style);
@@ -183,11 +190,9 @@
       <div class="task-progress-stage">
         <div class="task-progress-stage-main">
           <div class="task-progress-stage-name"></div>
-          <div class="task-progress-dots" aria-hidden="true">
-            <span class="task-progress-dot"></span>
-            <span class="task-progress-dot"></span>
-            <span class="task-progress-dot"></span>
-            <span class="task-progress-dot"></span>
+          <div class="task-progress-wave" aria-hidden="true">
+            <span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span>
           </div>
         </div>
         <div class="task-progress-elapsed">0:00</div>
