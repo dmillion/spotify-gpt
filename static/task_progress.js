@@ -113,28 +113,41 @@
         color:var(--muted);
         font:500 11px 'DM Mono',monospace;
       }
-      .task-progress-rail {
+      .task-progress-dots {
         position:relative;
-        height:4px;
-        margin-top:9px;
+        height:8px;
+        margin-top:10px;
         overflow:hidden;
-        background:color-mix(in srgb,var(--line) 72%,transparent);
+        opacity:.7;
+        background:
+          radial-gradient(circle, color-mix(in srgb,var(--line-strong) 70%,transparent) 1px, transparent 1.5px)
+          left center / 18px 8px repeat-x;
       }
-      .task-progress-rail > span {
+      .task-progress-dots > span {
         position:absolute;
-        inset:0 auto 0 0;
-        width:22%;
-        background:linear-gradient(90deg,var(--accent-deep,var(--acid)),var(--acid),var(--warm-accent,var(--red)));
+        top:50%;
+        left:0;
+        width:5px;
+        height:5px;
+        border-radius:50%;
+        background:var(--acid);
+        transform:translateY(-50%);
+        opacity:.8;
       }
-      .is-active .task-progress-rail > span { animation:task-runner 1.55s ease-in-out infinite alternate; }
-      @keyframes task-runner { from { transform:translateX(-20%); } to { transform:translateX(365%); } }
+      .is-active .task-progress-dots > span {
+        animation:task-plod 11s steps(12,end) infinite;
+      }
+      @keyframes task-plod {
+        from { left:0; }
+        to { left:calc(100% - 5px); }
+      }
       .task-progress.is-error .task-progress-stage-name { color:var(--red); }
       @media (max-width:700px) {
         .task-progress { margin-top:-6px; }
         .task-progress-stage { grid-template-columns:1fr auto; gap:5px 12px; }
       }
       @media (prefers-reduced-motion:reduce) {
-        .task-progress-rail > span { animation:none !important; }
+        .task-progress-dots > span { animation:none !important; }
       }
     `;
     document.head.appendChild(style);
@@ -154,7 +167,7 @@
         <div class="task-progress-stage-name"></div>
         <div class="task-progress-elapsed">0:00</div>
       </div>
-      <div class="task-progress-rail" aria-hidden="true"><span></span></div>
+      <div class="task-progress-dots" aria-hidden="true"><span></span></div>
     `;
     const status = document.querySelector('#status');
     if (status?.parentNode) status.insertAdjacentElement('afterend', panel);
