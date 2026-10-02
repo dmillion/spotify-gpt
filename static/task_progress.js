@@ -109,7 +109,7 @@
         justify-items:start;
       }
       .task-progress-stage-name {
-        color:var(--acid);
+        color:var(--warm-accent,var(--red));
         font:500 12px/1.4 'DM Mono',monospace;
         letter-spacing:.055em;
         white-space:nowrap;
@@ -216,8 +216,7 @@
 
   function scrollToProgress(panel) {
     window.requestAnimationFrame(() => {
-      const status = document.querySelector('#status');
-      (status || panel).scrollIntoView({behavior:'smooth', block:'start'});
+      panel.scrollIntoView({behavior:'smooth', block:'start'});
     });
   }
 
@@ -237,7 +236,7 @@
     setStage(panel, task, 0);
 
     const legacyStatus = document.querySelector('#status');
-    if (legacyStatus) legacyStatus.textContent = task.status;
+    if (legacyStatus) legacyStatus.textContent = '';
 
     if (type === 'regenerate') scrollToProgress(panel);
 
