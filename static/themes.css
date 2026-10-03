@@ -29,24 +29,45 @@
   --signal-primary-duration:8s;
 }
 html[data-theme='amber'] {
-  --ink:#fae8cd;
-  --muted:#c4ae8d;
-  --paper:#120e0a;
-  --surface:#211a12;
-  --control:#17110c;
-  --acid:#ffd08a;
-  --accent-mid:#d4a85e;
-  --accent-deep:#6d4d25;
-  --accent-deeper:#352716;
-  --red:#a9d6c7;
-  --warm-accent:#c6f4ee;
-  --line:#52432d;
-  --line-strong:#a08a62;
-  --focus:#c6f4ee;
-  --button-ink:#241506;
-  --accent-hover:#ffe6b7;
-  --glow:rgba(255,192,98,.07);
-  --crt-glow:rgba(255,208,138,.22);
+  --ink:#ffd79a;
+  --muted:#b98953;
+  --paper:#090502;
+  --surface:#160b04;
+  --control:#0f0703;
+  --acid:#ff9d2e;
+  --accent-mid:#d86e14;
+  --accent-deep:#7a3208;
+  --accent-deeper:#321304;
+  --red:#ffd06a;
+  --warm-accent:#ff7a18;
+  --line:#3d1d0b;
+  --line-strong:#8c4314;
+  --focus:#ffd79a;
+  --button-ink:#1a0901;
+  --accent-hover:#ffb95e;
+  --glow:rgba(255,112,24,.12);
+  --crt-glow:rgba(255,126,32,.38);
+}
+html[data-theme='amber'] .composer,
+html[data-theme='amber'] .playlist,
+html[data-theme='amber'] .usage,
+html[data-theme='amber'] .network-terminal {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb,var(--acid) 10%,transparent),
+    0 0 18px color-mix(in srgb,var(--acid) 8%,transparent);
+}
+html[data-theme='amber'] .studio-header h1,
+html[data-theme='amber'] .prompt-label,
+html[data-theme='amber'] .section-head h2,
+html[data-theme='amber'] .task-progress-stage-name {
+  text-shadow:
+    0 0 5px color-mix(in srgb,var(--acid) 34%,transparent),
+    0 0 16px color-mix(in srgb,var(--acid) 12%,transparent);
+}
+html[data-theme='amber'][data-crt='on'] body::after {
+  box-shadow:
+    inset 0 0 150px rgba(0,0,0,.46),
+    inset 0 0 46px rgba(255,126,32,.24);
 }
 
 html[data-theme='green-phosphor'] {
