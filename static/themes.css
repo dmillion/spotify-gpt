@@ -322,6 +322,88 @@ html[data-theme='halloween'] .playlist h3 {
   }
 }
 
+/* Rare Halloween signal-loss burst: randomized in JS so it feels incidental rather than looped. */
+html[data-theme='halloween'] .studio-header h1,
+html[data-theme='halloween'] .studio-header h1::before,
+html[data-theme='halloween'] .studio-header h1::after,
+html[data-theme='halloween'] .studio-header::before,
+html[data-theme='halloween'] .studio-header::after {
+  animation:none;
+}
+
+html[data-theme='halloween'] .studio-header h1::before,
+html[data-theme='halloween'] .studio-header h1::after,
+html[data-theme='halloween'] .studio-header::before,
+html[data-theme='halloween'] .studio-header::after {
+  opacity:0;
+}
+
+html[data-theme='halloween'] .studio-header.halloween-glitch-burst h1 {
+  animation:halloween-burst-body .54s steps(1,end) both;
+}
+
+html[data-theme='halloween'] .studio-header.halloween-glitch-burst h1::before {
+  opacity:.38;
+  animation:halloween-burst-slice-a .46s steps(1,end) both;
+}
+
+html[data-theme='halloween'] .studio-header.halloween-glitch-burst h1::after {
+  opacity:.28;
+  animation:halloween-burst-slice-b .52s steps(1,end) both;
+}
+
+html[data-theme='halloween'] .studio-header.halloween-glitch-burst::before {
+  top:var(--glitch-tear-a,44%);
+  opacity:.34;
+  animation:halloween-burst-tear-a .38s steps(1,end) both;
+}
+
+html[data-theme='halloween'] .studio-header.halloween-glitch-burst::after {
+  top:var(--glitch-tear-b,68%);
+  opacity:.24;
+  animation:halloween-burst-tear-b .44s steps(1,end) both;
+}
+
+@keyframes halloween-burst-body {
+  0%,18%,100% { transform:translate(0,0); filter:none; }
+  22% { transform:translate(-1px,0); filter:brightness(1.04); }
+  30% { transform:translate(2px,0); }
+  38% { transform:translate(-1px,1px); }
+  48% { transform:translate(0,0); filter:none; }
+  62% { transform:translate(1px,0); }
+  72% { transform:translate(0,0); }
+}
+
+@keyframes halloween-burst-slice-a {
+  0%,100% { clip-path:inset(12% 0 72% 0); transform:translateX(0); }
+  18% { clip-path:inset(58% 0 18% 0); transform:translateX(var(--glitch-x-a,6px)); }
+  34% { clip-path:inset(31% 0 51% 0); transform:translateX(calc(var(--glitch-x-a,6px) * -.55)); }
+  54% { clip-path:inset(74% 0 7% 0); transform:translateX(calc(var(--glitch-x-a,6px) * .7)); }
+  76% { clip-path:inset(8% 0 78% 0); transform:translateX(calc(var(--glitch-x-a,6px) * -.35)); }
+}
+
+@keyframes halloween-burst-slice-b {
+  0%,100% { clip-path:inset(68% 0 10% 0); transform:translateX(0); }
+  16% { clip-path:inset(20% 0 63% 0); transform:translateX(var(--glitch-x-b,-5px)); }
+  37% { clip-path:inset(46% 0 36% 0); transform:translateX(calc(var(--glitch-x-b,-5px) * -.7)); }
+  57% { clip-path:inset(10% 0 75% 0); transform:translateX(calc(var(--glitch-x-b,-5px) * .8)); }
+  80% { clip-path:inset(61% 0 19% 0); transform:translateX(calc(var(--glitch-x-b,-5px) * -.4)); }
+}
+
+@keyframes halloween-burst-tear-a {
+  0%,100% { transform:translateX(0) scaleX(.82); opacity:0; }
+  24% { transform:translateX(-10px) scaleX(.92); opacity:.14; }
+  42% { transform:translateX(18px) scaleX(1.08); opacity:.34; }
+  64% { transform:translateX(-7px) scaleX(.96); opacity:.18; }
+}
+
+@keyframes halloween-burst-tear-b {
+  0%,100% { transform:translateX(0) scaleX(.88); opacity:0; }
+  28% { transform:translateX(12px) scaleX(1.02); opacity:.10; }
+  50% { transform:translateX(-15px) scaleX(1.06); opacity:.24; }
+  70% { transform:translateX(6px) scaleX(.94); opacity:.12; }
+}
+
 html {
   min-height:100%;
   color-scheme:dark;
