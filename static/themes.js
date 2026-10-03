@@ -482,10 +482,30 @@
 
       const triggerHalloweenClickGlitch = () => {
         if (document.documentElement.dataset.theme !== 'halloween') return;
+
+        const band = () => {
+          const top = 6 + Math.round(Math.random() * 68);
+          const height = 8 + Math.round(Math.random() * 14);
+          return [top, Math.max(2, 100 - top - height)];
+        };
+        const [aTop, aBottom] = band();
+        const [bTop, bBottom] = band();
+        const direction = Math.random() < .5 ? -1 : 1;
+
+        studioHeader.style.setProperty('--click-a-top', `${aTop}%`);
+        studioHeader.style.setProperty('--click-a-bottom', `${aBottom}%`);
+        studioHeader.style.setProperty('--click-b-top', `${bTop}%`);
+        studioHeader.style.setProperty('--click-b-bottom', `${bBottom}%`);
+        studioHeader.style.setProperty('--click-x-a', `${direction * (10 + Math.round(Math.random() * 10))}px`);
+        studioHeader.style.setProperty('--click-x-b', `${-direction * (8 + Math.round(Math.random() * 12))}px`);
+        studioHeader.style.setProperty('--click-skew', `${direction * (1 + Math.round(Math.random() * 2))}deg`);
+        studioHeader.style.setProperty('--click-tear-a', `${20 + Math.round(Math.random() * 48)}%`);
+        studioHeader.style.setProperty('--click-tear-b', `${46 + Math.round(Math.random() * 38)}%`);
+
         studioHeader.classList.remove('halloween-click-glitch');
         void studioHeader.offsetWidth;
         studioHeader.classList.add('halloween-click-glitch');
-        window.setTimeout(() => studioHeader.classList.remove('halloween-click-glitch'), 1250);
+        window.setTimeout(() => studioHeader.classList.remove('halloween-click-glitch'), 620);
       };
 
       const logo = studioHeader.querySelector('h1');
