@@ -91,6 +91,27 @@ html[data-theme='green-phosphor'] {
   --crt-glow:rgba(82,255,108,.32);
 }
 
+html[data-theme='halloween'] {
+  --ink:#f4dfc5;
+  --muted:#a98aa8;
+  --paper:#08050b;
+  --surface:#130b18;
+  --control:#0d0711;
+  --acid:#ff7a18;
+  --accent-mid:#a454d6;
+  --accent-deep:#55236e;
+  --accent-deeper:#24102f;
+  --red:#b8f25b;
+  --warm-accent:#b8f25b;
+  --line:#33203d;
+  --line-strong:#75448b;
+  --focus:#ffd06a;
+  --button-ink:#180803;
+  --accent-hover:#ffad4d;
+  --glow:rgba(167,73,214,.11);
+  --crt-glow:rgba(255,105,22,.34);
+}
+
 html {
   min-height:100%;
   color-scheme:dark;
