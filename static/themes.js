@@ -457,24 +457,36 @@
     const studioHeader = document.querySelector('.studio-header');
 
     if (studioHeader && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      const triggerHalloweenBurst = () => {
+        if (document.documentElement.dataset.theme !== 'halloween') return;
+
+        const root = studioHeader;
+        const direction = Math.random() < .5 ? -1 : 1;
+        root.style.setProperty('--glitch-x-a', `${direction * (4 + Math.round(Math.random() * 5))}px`);
+        root.style.setProperty('--glitch-x-b', `${-direction * (3 + Math.round(Math.random() * 6))}px`);
+        root.style.setProperty('--glitch-tear-a', `${28 + Math.round(Math.random() * 34)}%`);
+        root.style.setProperty('--glitch-tear-b', `${52 + Math.round(Math.random() * 28)}%`);
+        root.classList.remove('halloween-glitch-burst');
+        void root.offsetWidth;
+        root.classList.add('halloween-glitch-burst');
+        window.setTimeout(() => root.classList.remove('halloween-glitch-burst'), 420 + Math.random() * 220);
+      };
+
       const scheduleHalloweenBurst = () => {
-        const delay = 11000 + Math.random() * 17000;
+        const delay = 18000 + Math.random() * 27000;
         window.setTimeout(() => {
-          if (document.documentElement.dataset.theme === 'halloween' && !document.hidden) {
-            const root = studioHeader;
-            const direction = Math.random() < .5 ? -1 : 1;
-            root.style.setProperty('--glitch-x-a', `${direction * (4 + Math.round(Math.random() * 5))}px`);
-            root.style.setProperty('--glitch-x-b', `${-direction * (3 + Math.round(Math.random() * 6))}px`);
-            root.style.setProperty('--glitch-tear-a', `${28 + Math.round(Math.random() * 34)}%`);
-            root.style.setProperty('--glitch-tear-b', `${52 + Math.round(Math.random() * 28)}%`);
-            root.classList.remove('halloween-glitch-burst');
-            void root.offsetWidth;
-            root.classList.add('halloween-glitch-burst');
-            window.setTimeout(() => root.classList.remove('halloween-glitch-burst'), 420 + Math.random() * 220);
-          }
+          if (!document.hidden) triggerHalloweenBurst();
           scheduleHalloweenBurst();
         }, delay);
       };
+
+      const logo = studioHeader.querySelector('h1');
+      if (logo) {
+        logo.style.cursor = 'pointer';
+        logo.title = 'Glitch the signal';
+        logo.addEventListener('click', triggerHalloweenBurst);
+      }
+
       scheduleHalloweenBurst();
     }
     if (!promptBox || !composer || !generateButton) return;
