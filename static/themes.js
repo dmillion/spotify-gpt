@@ -480,11 +480,19 @@
         }, delay);
       };
 
+      const triggerHalloweenClickGlitch = () => {
+        if (document.documentElement.dataset.theme !== 'halloween') return;
+        studioHeader.classList.remove('halloween-click-glitch');
+        void studioHeader.offsetWidth;
+        studioHeader.classList.add('halloween-click-glitch');
+        window.setTimeout(() => studioHeader.classList.remove('halloween-click-glitch'), 1250);
+      };
+
       const logo = studioHeader.querySelector('h1');
       if (logo) {
         logo.style.cursor = 'pointer';
         logo.title = 'Glitch the signal';
-        logo.addEventListener('click', triggerHalloweenBurst);
+        logo.addEventListener('click', triggerHalloweenClickGlitch);
       }
 
       scheduleHalloweenBurst();
