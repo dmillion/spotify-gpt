@@ -205,16 +205,6 @@ html[data-theme='halloween'] .studio-header::after {
   animation:halloween-video-tear-b 16.8s steps(1,end) infinite;
 }
 
-html[data-theme='halloween'] .prompt-label,
-html[data-theme='halloween'] .section-head h2,
-html[data-theme='halloween'] .task-progress-stage-name,
-html[data-theme='halloween'] .playlist h3 {
-  animation:halloween-text-aberration 14.6s steps(1,end) infinite;
-  text-shadow:
-    1px 0 rgba(255,49,93,.18),
-    -1px 0 rgba(101,246,255,.14);
-}
-
 @keyframes halloween-logo-base {
   0%,74%,78%,83%,88%,100% {
     transform:translate(0,0) skewX(0);
@@ -281,32 +271,6 @@ html[data-theme='halloween'] .playlist h3 {
   85% { opacity:.10; transform:translateX(-8px) scaleX(1.03); }
 }
 
-@keyframes halloween-text-aberration {
-  0%,86%,90%,94%,100% {
-    transform:translateX(0);
-    text-shadow:
-      1px 0 rgba(255,49,93,.18),
-      -1px 0 rgba(101,246,255,.14);
-  }
-  87% {
-    transform:translateX(-1px);
-    text-shadow:
-      3px 0 rgba(255,49,93,.34),
-      -2px 0 rgba(101,246,255,.24);
-  }
-  88% {
-    transform:translateX(1px);
-    text-shadow:
-      1px 0 rgba(255,49,93,.22),
-      -4px 0 rgba(101,246,255,.30);
-  }
-  89% {
-    transform:translateX(0);
-  }
-  91% { opacity:.88; }
-  92% { opacity:1; }
-  93% { opacity:.94; }
-}
 
 @media (prefers-reduced-motion:reduce) {
   html[data-theme='halloween'] .studio-header h1,
@@ -314,12 +278,6 @@ html[data-theme='halloween'] .playlist h3 {
   html[data-theme='halloween'] .studio-header h1::after,
   html[data-theme='halloween'] .studio-header::before,
   html[data-theme='halloween'] .studio-header::after,
-  html[data-theme='halloween'] .prompt-label,
-  html[data-theme='halloween'] .section-head h2,
-  html[data-theme='halloween'] .task-progress-stage-name,
-  html[data-theme='halloween'] .playlist h3 {
-    animation:none;
-  }
 }
 
 /* Click-triggered Halloween glitch: one stronger randomized corruption burst. */
