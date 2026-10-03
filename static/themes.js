@@ -3,7 +3,7 @@
   const key = 'bitraider-theme';
   const crtKey = 'bitraider-crt';
   const legacyKey = 'mixtape-foundry-theme';
-  const themes = ['deep-space', 'amber'];
+  const themes = ['deep-space', 'amber', 'green-phosphor'];
   const defaultPromptPlaceholder = 'Pick an artist or sound and describe where you want it to go...';
   let selected = 'deep-space';
   let crtEnabled = false;
