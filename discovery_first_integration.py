@@ -23,7 +23,7 @@ _external_candidates = tone_raider.lastfm_external_candidates
 
 LOCAL_SPECIMEN_LIMIT = max(8, int(os.environ.get("DISCOVERY_LOCAL_SPECIMEN_LIMIT", "24")))
 EXTERNAL_DISCOVERY_LIMIT = max(30, int(os.environ.get("DISCOVERY_EXTERNAL_LIMIT", "72")))
-LOCAL_FINAL_LIMIT = max(1, int(os.environ.get("DISCOVERY_LOCAL_FINAL_LIMIT", "5")))
+LOCAL_FINAL_LIMIT = max(1, int(os.environ.get("DISCOVERY_LOCAL_FINAL_LIMIT", "2")))
 ANCHOR_MIN_TRACKS = max(1, int(os.environ.get("DISCOVERY_ANCHOR_MIN_TRACKS", "2")))
 ANCHOR_MAX_TRACKS = max(ANCHOR_MIN_TRACKS, int(os.environ.get("DISCOVERY_ANCHOR_MAX_TRACKS", "3")))
 NON_ANCHOR_ARTIST_LIMIT = max(1, int(os.environ.get("DISCOVERY_NON_ANCHOR_ARTIST_LIMIT", "1")))
@@ -67,6 +67,40 @@ def _compact_external(row: dict, candidate_id: str) -> dict:
     return result
 
 
+def _style_key(value: str) -> str:
+    return " ".join(str(value or "").casefold().replace("_", " ").replace("-", " ").split())
+
+
+def _local_matches_anchor_style(row: dict, anchor_styles: list[str]) -> bool:
+    """Require local specimens to share specific style evidence with the prompt anchor."""
+    if not anchor_styles:
+        return True
+
+    genre = _style_key(row.get("genre", ""))
+    if not genre:
+        return False
+
+    generic = {
+        "rock", "metal", "alternative", "indie", "punk", "pop", "folk",
+        "country", "jazz", "blues", "electronic", "experimental",
+    }
+    genre_parts = {
+        part.strip()
+        for part in genre.replace("/", ",").replace(";", ",").split(",")
+        if part.strip()
+    }
+    genre_parts.add(genre)
+
+    for style in anchor_styles:
+        style = _style_key(style)
+        if not style or style in generic:
+            continue
+        for part in genre_parts:
+            if style == part or style in part or part in style:
+                return True
+    return False
+
+
 def ask_for_discovery_first_playlist(prompt: str, excluded_tracks=None) -> dict:
     """Curate primarily from discovered music, using the local library as evidence."""
     anchor_name = _prompt_artist_name(prompt) or ""
@@ -105,6 +139,26 @@ def ask_for_discovery_first_playlist(prompt: str, excluded_tracks=None) -> dict:
                 )
                 if not artist_blocked(row.get("artist", ""))
             ]
+
+            # Theme words can produce misleading local title matches ("spooky",
+            # "Halloween", etc.). With a named inspiration artist, local tracks are
+            # allowed to seed discovery only when their genre metadata supports one
+            # of the anchor's specific styles.
+            anchor_styles = anchor_similarity._anchor_style_profile(anchor_name) if anchor_name else []
+            if anchor_name and anchor_styles:
+                before_count = len(local_candidates)
+                local_candidates = [
+                    row for row in local_candidates
+                    if normalize_artist(row.get("artist", "")) == anchor_key
+                    or _local_matches_anchor_style(row, anchor_styles)
+                ]
+                removed = before_count - len(local_candidates)
+                if removed:
+                    print(
+                        f"[Tune Raider] anchor-style local filter: removed {removed} local specimen(s) "
+                        f"that did not match {anchor_name!r} styles",
+                        flush=True,
+                    )
 
             # External discovery is the primary candidate source. Existing MusicBrainz
             # and artist-similarity hooks participate here automatically.
@@ -192,8 +246,11 @@ def ask_for_discovery_first_playlist(prompt: str, excluded_tracks=None) -> dict:
                 "that preserves the relevant traits while introducing artists the user may not already know. Collaborative-listening "
                 "similarity is supporting evidence, not permission to cross into a different genre. Broad tags such as rock, folk, "
                 "indie, country, jazz, or blues are insufficient on their own when the anchor has a more specific sound. Apply user "
-                "modifiers such as party, darker, heavier, slower, melodic, or danceable *within* the anchor's musical vocabulary "
-                "unless the prompt explicitly requests a stylistic transition. Maximize useful artist variety: normally choose one "
+                "modifiers such as party, darker, heavier, slower, melodic, danceable, spooky, Halloween, summer, or cinematic "
+                "*within* the anchor's musical vocabulary unless the prompt explicitly requests a stylistic transition. Theme or "
+                "mood words are not genre evidence: a candidate does not become relevant merely because its artist, title, or album "
+                "contains the theme word. Preserve the anchor's instrumentation, rhythmic language, and scene before matching the "
+                "theme. Maximize useful artist variety: normally choose one "
                 "track per non-anchor artist when comparable alternatives exist, while the explicitly named inspiration artist may "
                 "contribute several strong tracks. Do not select any globally blocked artist. Preserve a coherent sequence. Use only "
                 "supplied candidate_id values; never invent tracks or IDs. Candidate pool: "
