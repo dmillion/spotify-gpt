@@ -411,8 +411,8 @@ a { color:var(--acid); text-underline-offset:4px; }
 .login-main button:hover { background:var(--accent-hover); }
 .error { color:var(--red); }
 
-/* Optional CRT layer inspired by cool-retro-term: stronger center geometry, edge distortion,
-   scanlines, moving refresh bands, vignette, bloom, and subtle brightness modulation. */
+/* Optional CRT layer: dense fixed scanlines, phosphor separation, vignette,
+   bloom, and irregular display flicker without a moving refresh band. */
 body::after { display:none; }
 html[data-crt='on'] body { position:relative; overflow-x:hidden; }
 html[data-crt='on'] body::after {
@@ -424,19 +424,44 @@ html[data-crt='on'] body::after {
   inset:-4%;
   border-radius:4% / 3%;
   background:
-    linear-gradient(rgba(18,16,16,0) 50%,rgba(0,0,0,.13) 50%),
-    linear-gradient(90deg,rgba(255,0,0,.022),rgba(0,255,0,.010),rgba(0,0,255,.022)),
-    linear-gradient(180deg,transparent 0%,rgba(255,255,255,.035) 49%,rgba(255,255,255,.10) 50%,rgba(255,255,255,.025) 51%,transparent 100%),
-    radial-gradient(ellipse at center,transparent 50%,rgba(0,0,0,.12) 76%,rgba(0,0,0,.43) 100%);
-  background-size:100% 4px,7px 100%,100% 180%,100% 100%;
-  animation:crt-flicker 6s infinite,crt-refresh 8s linear infinite;
-  box-shadow:inset 0 0 110px rgba(0,0,0,.30),inset 0 0 28px var(--crt-glow);
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255,255,255,.035) 0,
+      rgba(255,255,255,.035) 1px,
+      rgba(0,0,0,.24) 1px,
+      rgba(0,0,0,.24) 2px,
+      rgba(0,0,0,.08) 2px,
+      rgba(0,0,0,.08) 4px
+    ),
+    repeating-linear-gradient(
+      to right,
+      rgba(255,0,0,.026) 0,
+      rgba(255,0,0,.026) 1px,
+      rgba(0,255,0,.012) 1px,
+      rgba(0,255,0,.012) 2px,
+      rgba(0,0,255,.026) 2px,
+      rgba(0,0,255,.026) 3px,
+      transparent 3px,
+      transparent 6px
+    ),
+    radial-gradient(
+      ellipse at center,
+      transparent 46%,
+      rgba(0,0,0,.10) 72%,
+      rgba(0,0,0,.46) 100%
+    );
+  background-size:100% 4px,6px 100%,100% 100%;
+  animation:crt-flicker .22s steps(2,end) infinite;
+  box-shadow:
+    inset 0 0 120px rgba(0,0,0,.36),
+    inset 0 0 34px var(--crt-glow);
 }
 html[data-crt='on'] body > main,
 html[data-crt='on'] body > .login-main {
   transform:perspective(1250px) rotateX(.7deg) scaleX(.985) scaleY(.975);
   transform-origin:50% 5%;
-  filter:contrast(1.035) saturate(1.035) drop-shadow(0 0 1px var(--crt-glow));
+  filter:contrast(1.075) saturate(1.04) brightness(.985) drop-shadow(0 0 1px var(--crt-glow));
+  animation:crt-content-flicker 2.8s steps(1,end) infinite;
 }
 html[data-crt='on'] h1,
 html[data-crt='on'] h2,
@@ -445,13 +470,27 @@ html[data-crt='on'] .generate,
 html[data-crt='on'] .regen,
 html[data-crt='on'] .workstation-id { text-shadow:0 0 4px var(--crt-glow); }
 html[data-crt='on'] .signal-primary { filter:drop-shadow(0 0 4px var(--crt-glow)); }
-@keyframes crt-refresh {
-  from { background-position:0 0,0 0,0 -180%,0 0; }
-  to { background-position:0 0,0 0,0 180%,0 0; }
-}
+
 @keyframes crt-flicker {
-  0%,8%,20%,32%,54%,67%,83%,100% { opacity:.96; }
-  9%,21%,33%,55%,68%,84% { opacity:.985; }
+  0%,100% { opacity:.92; }
+  12% { opacity:.97; }
+  18% { opacity:.90; }
+  35% { opacity:.95; }
+  52% { opacity:.89; }
+  68% { opacity:.96; }
+  83% { opacity:.91; }
+}
+@keyframes crt-content-flicker {
+  0%,7%,11%,28%,31%,57%,60%,78%,81%,100% { opacity:1; }
+  8% { opacity:.982; }
+  29% { opacity:.972; }
+  58% { opacity:.986; }
+  79% { opacity:.976; }
+}
+@media (prefers-reduced-motion:reduce) {
+  html[data-crt='on'] body::after,
+  html[data-crt='on'] body > main,
+  html[data-crt='on'] body > .login-main { animation:none; }
 }
 
 @media (max-width:900px) {
