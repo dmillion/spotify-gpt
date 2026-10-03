@@ -322,6 +322,103 @@ html[data-theme='halloween'] .playlist h3 {
   }
 }
 
+/* Click-triggered Halloween glitch based on the classic clipped-slice text treatment:
+   duplicated color channels rapidly jump through narrow horizontal bands, then settle. */
+html[data-theme='halloween'] .studio-header.halloween-click-glitch h1 {
+  animation:halloween-click-base 1.2s steps(1,end) both;
+}
+
+html[data-theme='halloween'] .studio-header.halloween-click-glitch h1::before,
+html[data-theme='halloween'] .studio-header.halloween-click-glitch h1::after {
+  opacity:.82;
+  background:var(--paper);
+  mix-blend-mode:screen;
+}
+
+html[data-theme='halloween'] .studio-header.halloween-click-glitch h1::before {
+  left:-3px;
+  color:#ff8a22;
+  text-shadow:2px 0 #ff315d;
+  animation:halloween-click-slice-a .82s steps(1,end) 2;
+}
+
+html[data-theme='halloween'] .studio-header.halloween-click-glitch h1::after {
+  left:3px;
+  color:#c264ff;
+  text-shadow:-2px 0 #65f6ff;
+  animation:halloween-click-slice-b .74s steps(1,end) 2;
+}
+
+html[data-theme='halloween'] .studio-header.halloween-click-glitch::before {
+  top:34%;
+  opacity:.32;
+  animation:halloween-click-tear-a .48s steps(1,end) 2;
+}
+
+html[data-theme='halloween'] .studio-header.halloween-click-glitch::after {
+  top:63%;
+  opacity:.24;
+  animation:halloween-click-tear-b .56s steps(1,end) 2;
+}
+
+@keyframes halloween-click-base {
+  0%,100% { transform:translate(0,0); filter:none; }
+  8% { transform:translate(-2px,0); }
+  13% { transform:translate(2px,0); filter:brightness(1.10); }
+  19% { transform:translate(-1px,1px) skewX(-1deg); }
+  26% { transform:translate(3px,0); }
+  33% { transform:translate(0,0); }
+  58% { transform:translate(-2px,0); }
+  64% { transform:translate(1px,-1px); filter:brightness(1.06); }
+  72% { transform:translate(0,0); }
+}
+
+@keyframes halloween-click-slice-a {
+  0%,100% { clip-path:inset(2% 0 86% 0); transform:translateX(-2px); }
+  8%  { clip-path:inset(74% 0 8% 0); transform:translateX(7px); }
+  15% { clip-path:inset(18% 0 67% 0); transform:translateX(-6px); }
+  23% { clip-path:inset(51% 0 32% 0); transform:translateX(10px); }
+  31% { clip-path:inset(33% 0 53% 0); transform:translateX(-8px); }
+  40% { clip-path:inset(81% 0 3% 0); transform:translateX(5px); }
+  49% { clip-path:inset(9% 0 78% 0); transform:translateX(-4px); }
+  58% { clip-path:inset(63% 0 21% 0); transform:translateX(8px); }
+  67% { clip-path:inset(27% 0 58% 0); transform:translateX(-9px); }
+  76% { clip-path:inset(44% 0 39% 0); transform:translateX(6px); }
+  87% { clip-path:inset(14% 0 72% 0); transform:translateX(-5px); }
+  94% { clip-path:inset(69% 0 14% 0); transform:translateX(4px); }
+}
+
+@keyframes halloween-click-slice-b {
+  0%,100% { clip-path:inset(70% 0 13% 0); transform:translateX(2px); }
+  7%  { clip-path:inset(24% 0 62% 0); transform:translateX(-8px); }
+  14% { clip-path:inset(56% 0 28% 0); transform:translateX(6px); }
+  22% { clip-path:inset(7% 0 81% 0); transform:translateX(-10px); }
+  30% { clip-path:inset(39% 0 45% 0); transform:translateX(8px); }
+  39% { clip-path:inset(78% 0 6% 0); transform:translateX(-5px); }
+  48% { clip-path:inset(17% 0 68% 0); transform:translateX(4px); }
+  57% { clip-path:inset(60% 0 23% 0); transform:translateX(-7px); }
+  66% { clip-path:inset(30% 0 55% 0); transform:translateX(9px); }
+  75% { clip-path:inset(48% 0 36% 0); transform:translateX(-6px); }
+  86% { clip-path:inset(11% 0 75% 0); transform:translateX(5px); }
+  95% { clip-path:inset(66% 0 17% 0); transform:translateX(-4px); }
+}
+
+@keyframes halloween-click-tear-a {
+  0%,100% { transform:translateX(0) scaleX(.82); opacity:0; }
+  18% { transform:translateX(-14px) scaleX(.92); opacity:.14; }
+  35% { transform:translateX(26px) scaleX(1.10); opacity:.34; }
+  53% { transform:translateX(-20px) scaleX(.88); opacity:.20; }
+  72% { transform:translateX(12px) scaleX(1.03); opacity:.10; }
+}
+
+@keyframes halloween-click-tear-b {
+  0%,100% { transform:translateX(0) scaleX(.88); opacity:0; }
+  21% { transform:translateX(16px) scaleX(1.04); opacity:.10; }
+  42% { transform:translateX(-24px) scaleX(1.08); opacity:.26; }
+  61% { transform:translateX(18px) scaleX(.91); opacity:.16; }
+  80% { transform:translateX(-8px) scaleX(1.02); opacity:.08; }
+}
+
 /* Rare Halloween signal-loss burst: randomized in JS so it feels incidental rather than looped. */
 html[data-theme='halloween'] .studio-header h1,
 html[data-theme='halloween'] .studio-header h1::before,
