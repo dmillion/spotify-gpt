@@ -49,6 +49,27 @@ html[data-theme='amber'] {
   --crt-glow:rgba(255,208,138,.22);
 }
 
+html[data-theme='green-phosphor'] {
+  --ink:#b7ffba;
+  --muted:#6fa778;
+  --paper:#020704;
+  --surface:#07110a;
+  --control:#040b06;
+  --acid:#65ff78;
+  --accent-mid:#35c84d;
+  --accent-deep:#145f24;
+  --accent-deeper:#082d12;
+  --red:#d7ff8a;
+  --warm-accent:#d7ff8a;
+  --line:#15351d;
+  --line-strong:#2e6e3b;
+  --focus:#b7ffba;
+  --button-ink:#021005;
+  --accent-hover:#9bffa6;
+  --glow:rgba(65,255,98,.10);
+  --crt-glow:rgba(82,255,108,.32);
+}
+
 html {
   min-height:100%;
   color-scheme:dark;
