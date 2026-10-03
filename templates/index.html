@@ -94,80 +94,664 @@
   function genreTheme(genres) {
     const text = genres.join(' ').toLowerCase();
     const theme = (scenes, qualities, constraints) => ({scenes, qualities, constraints});
+
     if (/(ambient|drone|new age|soundscape|neoclassical|meditation)/.test(text)) {
       return theme(
-        ['a sleepless 2 a.m. room', 'a slow sunrise', 'a long empty highway at night', 'a rain-muted window', 'a dark room with only streetlight coming in'],
-        ['spacious and slow-moving', 'hazy and immersive', 'minimal but emotionally heavy', 'soft-edged and nocturnal', 'patient, textural, and low-lit'],
-        ['avoid sudden energy spikes', 'let tracks breathe', 'favor long transitions', 'keep percussion restrained', 'stay immersive rather than dramatic']
+        [
+          'a sleepless 2 a.m. room',
+          'a slow sunrise',
+          'a long empty highway at night',
+          'a rain-muted window',
+          'a dark room with only streetlight coming in',
+          'an empty airport before dawn',
+          'a foggy shoreline with no one around',
+          'a quiet train platform in winter',
+          'a dim hallway with the lights half off',
+          'a late flight over a sleeping city',
+        ],
+        [
+          'spacious and slow-moving',
+          'hazy and immersive',
+          'minimal but emotionally heavy',
+          'soft-edged and nocturnal',
+          'patient, textural, and low-lit',
+          'weightless but not passive',
+          'deeply atmospheric with subtle movement',
+          'warmly analog and suspended in time',
+          'glacial, detailed, and meditative',
+          'quietly cinematic without becoming grandiose',
+        ],
+        [
+          'avoid sudden energy spikes',
+          'let tracks breathe',
+          'favor long transitions',
+          'keep percussion restrained',
+          'stay immersive rather than dramatic',
+          'avoid obvious crescendos',
+          'favor texture over melody when the choice is interesting',
+          'keep the emotional temperature cool',
+          'let silence and negative space matter',
+          'avoid anything that feels like generic spa music',
+        ]
       );
     }
+
     if (/(sludge|doom|stoner|desert rock|heavy psych|southern metal)/.test(text)) {
       return theme(
-        ['a humid basement show', 'a desert highway after midnight', 'a blown-speaker practice room', 'a smoky bar near closing', 'a slow crawl through industrial backroads'],
-        ['low-slung and riff-heavy', 'dirty, bass-heavy, and physical', 'fuzzy with real forward motion', 'massive without turning static', 'groove-first and rough-edged'],
-        ['favor big riffs', 'avoid overly polished production', 'keep the low end huge', 'skip long shapeless intros', 'lean into deep cuts']
+        [
+          'a humid basement show',
+          'a desert highway after midnight',
+          'a blown-speaker practice room',
+          'a smoky bar near closing',
+          'a slow crawl through industrial backroads',
+          'a rusted-out van crossing state lines',
+          'a garage with one bare bulb and too many amps',
+          'a scorched parking lot after the show',
+          'a river town dive with the floor shaking',
+          'a storm rolling over flat farmland',
+        ],
+        [
+          'low-slung and riff-heavy',
+          'dirty, bass-heavy, and physical',
+          'fuzzy with real forward motion',
+          'massive without turning static',
+          'groove-first and rough-edged',
+          'bluesy but mean',
+          'slow enough to crush but still memorable',
+          'thick, greasy, and rhythmic',
+          'psychedelic without losing the riff',
+          'ugly in tone but precise in impact',
+        ],
+        [
+          'favor big riffs',
+          'avoid overly polished production',
+          'keep the low end huge',
+          'skip long shapeless intros',
+          'lean into deep cuts',
+          'favor groove over sheer tempo',
+          'keep the heaviness physical rather than atmospheric',
+          'avoid tracks that drift without payoff',
+          'mix slow crushers with a few faster jolts',
+          'prioritize memorable guitar parts over genre purity',
+        ]
       );
     }
+
     if (/(black metal|post-black|atmospheric black)/.test(text)) {
       return theme(
-        ['a freezing predawn walk', 'a storm moving over empty fields', 'a blacked-out highway', 'a windswept ridge', 'a dim winter room'],
-        ['cold, urgent, and atmospheric', 'raw but expansive', 'melodic without softening the edges', 'bleak with forward momentum', 'abrasive and cinematic'],
-        ['avoid glossy production', 'keep the atmosphere tense', 'favor long arcs that still move', 'skip novelty picks', 'let melody emerge through the noise']
+        [
+          'a freezing predawn walk',
+          'a storm moving over empty fields',
+          'a blacked-out highway',
+          'a windswept ridge',
+          'a dim winter room',
+          'a snow-covered forest before sunrise',
+          'an abandoned road in hard rain',
+          'a cliff above a gray sea',
+          'a power outage in the middle of winter',
+          'a cold industrial district at night',
+        ],
+        [
+          'cold, urgent, and atmospheric',
+          'raw but expansive',
+          'melodic without softening the edges',
+          'bleak with forward momentum',
+          'abrasive and cinematic',
+          'feral but emotionally focused',
+          'windswept and sharp-edged',
+          'repetitive in a hypnotic rather than stagnant way',
+          'icy, melodic, and relentless',
+          'desolate without becoming shapeless',
+        ],
+        [
+          'avoid glossy production',
+          'keep the atmosphere tense',
+          'favor long arcs that still move',
+          'skip novelty picks',
+          'let melody emerge through the noise',
+          'avoid overly symphonic detours',
+          'favor emotional intensity over technical flash',
+          'keep repetition purposeful',
+          'mix rawer tracks with a few expansive ones',
+          'avoid anything that loses its edge for atmosphere alone',
+        ]
       );
     }
+
     if (/(death metal|grind|grindcore|hardcore|powerviolence|metalcore)/.test(text)) {
       return theme(
-        ['a packed concrete room', 'a short violent commute', 'a fluorescent warehouse', 'a late-night gym session', 'a chaotic basement set'],
-        ['percussive and relentless', 'dense but sharply rhythmic', 'fast with real groove underneath', 'ugly in a controlled way', 'compact, physical, and immediate'],
-        ['keep dead air to a minimum', 'favor memorable breakdowns or rhythmic turns', 'avoid overlong intros', 'keep transitions aggressive', 'lean toward tracks with strong momentum']
+        [
+          'a packed concrete room',
+          'a short violent commute',
+          'a fluorescent warehouse',
+          'a late-night gym session',
+          'a chaotic basement set',
+          'a loading dock after midnight',
+          'a sweaty all-ages room with no barricade',
+          'a city bus ride after a terrible shift',
+          'a practice space with the PA clipping',
+          'a five-minute drive that needs maximum damage',
+        ],
+        [
+          'percussive and relentless',
+          'dense but sharply rhythmic',
+          'fast with real groove underneath',
+          'ugly in a controlled way',
+          'compact, physical, and immediate',
+          'violent but tightly arranged',
+          'abrasive with memorable rhythmic hooks',
+          'chaotic without becoming mush',
+          'blast-heavy with hard pivots into groove',
+          'short, nasty, and structurally sharp',
+        ],
+        [
+          'keep dead air to a minimum',
+          'favor memorable breakdowns or rhythmic turns',
+          'avoid overlong intros',
+          'keep transitions aggressive',
+          'lean toward tracks with strong momentum',
+          'favor impact over technical showing-off',
+          'mix speed with a few crushing half-time turns',
+          'avoid songs that blur together tonally',
+          'keep the sequence volatile',
+          'favor tracks that reveal their hook quickly',
+        ]
       );
     }
+
+    if (/(industrial|ebm|goth|darkwave|coldwave|post-industrial)/.test(text)) {
+      return theme(
+        [
+          'a shuttered factory district at 1 a.m.',
+          'a concrete stairwell under fluorescent light',
+          'a basement club with a broken smoke machine',
+          'an empty downtown parking garage',
+          'a rain-slicked alley behind a venue',
+          'a subway platform after the last train',
+          'a warehouse office with every monitor still on',
+          'a dead mall after closing',
+        ],
+        [
+          'mechanical and menacing',
+          'cold but highly physical',
+          'minimal, repetitive, and tense',
+          'synthetic with a hard rhythmic spine',
+          'darkly melodic without becoming theatrical',
+          'clipped, severe, and danceable',
+          'industrial but still hook-conscious',
+          'austere with controlled bursts of noise',
+        ],
+        [
+          'favor machine-like rhythm',
+          'avoid glossy synth-pop polish',
+          'keep the basslines prominent',
+          'lean toward darker club energy',
+          'favor tracks with distinct rhythmic identities',
+          'avoid overlong cinematic intros',
+          'mix rigid electronics with a little grit',
+          'keep the sequencing nocturnal and tense',
+        ]
+      );
+    }
+
     if (/(shoegaze|dream pop|slowcore|ethereal|indie pop)/.test(text)) {
       return theme(
-        ['a wet city drive after dark', 'a washed-out summer evening', 'a bedroom with the windows open', 'a gray Sunday afternoon', 'a train ride through rain'],
-        ['hazy but melodic', 'soft-focus with strong hooks', 'washed-out and emotionally direct', 'dreamy without becoming weightless', 'warm, layered, and bittersweet'],
-        ['keep the melodies strong', 'avoid abrupt stylistic jumps', 'favor texture over virtuosity', 'let the sequence gradually deepen', 'skip overly bright pop detours']
+        [
+          'a wet city drive after dark',
+          'a washed-out summer evening',
+          'a bedroom with the windows open',
+          'a gray Sunday afternoon',
+          'a train ride through rain',
+          'a motel balcony at sunset',
+          'an empty school parking lot in July',
+          'a quiet walk home after midnight',
+          'a coastal road under low clouds',
+          'a humid night with distant thunder',
+        ],
+        [
+          'hazy but melodic',
+          'soft-focus with strong hooks',
+          'washed-out and emotionally direct',
+          'dreamy without becoming weightless',
+          'warm, layered, and bittersweet',
+          'fuzzy but intimate',
+          'melancholic with a clear melodic center',
+          'blurred at the edges but rhythmically grounded',
+          'nostalgic without sounding retro for its own sake',
+          'slow-burning with moments of brightness',
+        ],
+        [
+          'keep the melodies strong',
+          'avoid abrupt stylistic jumps',
+          'favor texture over virtuosity',
+          'let the sequence gradually deepen',
+          'skip overly bright pop detours',
+          'avoid turning the whole set into one long blur',
+          'mix dense walls of sound with quieter relief',
+          'favor emotionally specific tracks',
+          'keep vocals integrated into the texture',
+          'use tempo changes sparingly but deliberately',
+        ]
       );
     }
+
     if (/(techno|house|electronic|idm|electro|dnb|drum and bass|breakbeat|synthwave)/.test(text)) {
       return theme(
-        ['a nearly empty club at 3 a.m.', 'a neon highway', 'a dark warehouse', 'a late-night coding session', 'a city train after midnight'],
-        ['hypnotic and pulse-driven', 'textural with a strong rhythmic spine', 'mechanical but warm', 'propulsive without getting frantic', 'deep, repetitive, and immersive'],
-        ['keep the transitions seamless', 'favor interesting production details', 'avoid cheesy festival peaks', 'let the groove evolve gradually', 'stay focused on rhythm and texture']
+        [
+          'a nearly empty club at 3 a.m.',
+          'a neon highway',
+          'a dark warehouse',
+          'a late-night coding session',
+          'a city train after midnight',
+          'an underground parking structure with perfect acoustics',
+          'a red-eye flight with the cabin lights down',
+          'a rooftop while the city is still awake',
+          'a tunnel drive with the windows up',
+          'a rainy walk through a business district after midnight',
+        ],
+        [
+          'hypnotic and pulse-driven',
+          'textural with a strong rhythmic spine',
+          'mechanical but warm',
+          'propulsive without getting frantic',
+          'deep, repetitive, and immersive',
+          'cleanly engineered but still human',
+          'bass-forward with restrained melodic detail',
+          'glitchy without losing the groove',
+          'kinetic and spacious at the same time',
+          'dark, precise, and gradually evolving',
+        ],
+        [
+          'keep the transitions seamless',
+          'favor interesting production details',
+          'avoid cheesy festival peaks',
+          'let the groove evolve gradually',
+          'stay focused on rhythm and texture',
+          'avoid tracks that front-load all their ideas',
+          'favor gradual tension over obvious drops',
+          'keep the low end disciplined',
+          'mix familiar grooves with a few stranger textures',
+          'avoid overly nostalgic synthwave clichés',
+        ]
       );
     }
+
     if (/(hip hop|rap|boom bap|trap|abstract hip hop|underground hip hop)/.test(text)) {
       return theme(
-        ['a night drive through the city', 'a dusty record-store afternoon', 'a low-key house party', 'a long train ride', 'a late summer evening'],
-        ['rhythm-first and production-heavy', 'dusty and sample-rich', 'bass-forward with sharp drums', 'left-field but still head-nodding', 'moody with strong pocket'],
-        ['favor distinctive beats', 'avoid generic radio picks', 'keep the sequencing rhythmic', 'lean into deep cuts', 'let production style guide the transitions']
+        [
+          'a night drive through the city',
+          'a dusty record-store afternoon',
+          'a low-key house party',
+          'a long train ride',
+          'a late summer evening',
+          'a corner store parking lot after midnight',
+          'a cold morning commute',
+          'a basement studio with the monitors too loud',
+          'a slow drive through empty downtown streets',
+          'a backyard gathering that gets louder after dark',
+        ],
+        [
+          'rhythm-first and production-heavy',
+          'dusty and sample-rich',
+          'bass-forward with sharp drums',
+          'left-field but still head-nodding',
+          'moody with strong pocket',
+          'minimal but menacing',
+          'warm, chopped-up, and tactile',
+          'off-kilter without losing bounce',
+          'lyrical with production that still carries weight',
+          'darkly melodic and drum-forward',
+        ],
+        [
+          'favor distinctive beats',
+          'avoid generic radio picks',
+          'keep the sequencing rhythmic',
+          'lean into deep cuts',
+          'let production style guide the transitions',
+          'avoid overloading the set with one producer aesthetic',
+          'mix dense tracks with a little breathing room',
+          'favor unusual samples or drum textures',
+          'keep hooks memorable without chasing obvious singles',
+          'let regional styles rub against each other when it works',
+        ]
       );
     }
+
     if (/(punk|post-punk|garage|noise rock|post-hardcore)/.test(text)) {
       return theme(
-        ['a tiny club with bad lighting', 'a fast drive across town', 'a half-empty dive bar', 'a cramped practice space', 'a gray afternoon with too much caffeine'],
-        ['raw and kinetic', 'angular with strong momentum', 'scrappy but hooky', 'noisy without losing the song', 'tense and rhythm-forward'],
-        ['avoid slick production', 'keep the energy moving', 'favor memorable guitar or bass lines', 'skip filler', 'stay rough around the edges']
+        [
+          'a tiny club with bad lighting',
+          'a fast drive across town',
+          'a half-empty dive bar',
+          'a cramped practice space',
+          'a gray afternoon with too much caffeine',
+          'a basement with a low ceiling and no stage',
+          'a bike ride through a cold downtown',
+          'a venue hallway while the opener is still playing',
+          'a warehouse party with blown fluorescent lights',
+          'a cheap motel room after a show',
+        ],
+        [
+          'raw and kinetic',
+          'angular with strong momentum',
+          'scrappy but hooky',
+          'noisy without losing the song',
+          'tense and rhythm-forward',
+          'abrasive with a memorable chorus hiding underneath',
+          'dry, wiry, and fast-moving',
+          'messy in texture but tight in arrangement',
+          'sarcastic, twitchy, and bass-driven',
+          'loud, immediate, and a little unstable',
+        ],
+        [
+          'avoid slick production',
+          'keep the energy moving',
+          'favor memorable guitar or bass lines',
+          'skip filler',
+          'stay rough around the edges',
+          'avoid too many tracks at the same tempo',
+          'favor songs that sound dangerous but controlled',
+          'mix blunt hooks with stranger rhythmic choices',
+          'keep intros short unless they earn the buildup',
+          'favor personality over technical perfection',
+        ]
       );
     }
+
     if (/(country|americana|folk|bluegrass|alt-country)/.test(text)) {
       return theme(
-        ['a two-lane road at dusk', 'a quiet bar after last call', 'a hot afternoon with the windows down', 'a long rural drive', 'a porch after a storm'],
-        ['warm and lived-in', 'dusty with strong storytelling', 'melodic and unpolished', 'rootsy without getting sleepy', 'plainspoken with some grit'],
-        ['avoid glossy crossover production', 'favor strong songwriting', 'lean into deep cuts', 'keep the pacing natural', 'let the instrumentation feel human']
+        [
+          'a two-lane road at dusk',
+          'a quiet bar after last call',
+          'a hot afternoon with the windows down',
+          'a long rural drive',
+          'a porch after a storm',
+          'a gas station at the edge of town',
+          'a county road just before sunrise',
+          'a nearly empty diner at midnight',
+          'a cool evening after a brutally hot day',
+          'a long drive home after a wedding',
+        ],
+        [
+          'warm and lived-in',
+          'dusty with strong storytelling',
+          'melodic and unpolished',
+          'rootsy without getting sleepy',
+          'plainspoken with some grit',
+          'loose, woody, and human',
+          'melancholic without becoming precious',
+          'road-worn with strong hooks',
+          'acoustic-forward but rhythmically alive',
+          'traditional in texture but not overly reverent',
+        ],
+        [
+          'avoid glossy crossover production',
+          'favor strong songwriting',
+          'lean into deep cuts',
+          'keep the pacing natural',
+          'let the instrumentation feel human',
+          'avoid making the whole set too sleepy',
+          'mix barroom grit with quieter storytelling',
+          'favor distinctive voices',
+          'let fiddle, steel, or acoustic texture shape transitions',
+          'avoid novelty-country detours',
+        ]
       );
     }
+
     if (/(jazz|fusion|bebop|soul jazz|spiritual jazz)/.test(text)) {
       return theme(
-        ['a dim room after midnight', 'a rainy afternoon', 'a quiet dinner that turns strange', 'a late train ride', 'a small club near closing'],
-        ['loose but purposeful', 'warm, intricate, and rhythmic', 'improvisational without losing direction', 'smoky and harmonically rich', 'restless but controlled'],
-        ['favor strong interplay', 'avoid background-music blandness', 'let the arrangements breathe', 'keep a rhythmic thread', 'mix familiar language with stranger turns']
+        [
+          'a dim room after midnight',
+          'a rainy afternoon',
+          'a quiet dinner that turns strange',
+          'a late train ride',
+          'a small club near closing',
+          'a hotel lounge after everyone important has left',
+          'a record shop on a slow weekday',
+          'a city walk just after the rain stops',
+          'a basement club with fifty people paying attention',
+          'an early morning kitchen with coffee going cold',
+        ],
+        [
+          'loose but purposeful',
+          'warm, intricate, and rhythmic',
+          'improvisational without losing direction',
+          'smoky and harmonically rich',
+          'restless but controlled',
+          'angular and conversational',
+          'deeply grooved without becoming background music',
+          'spacious with sharp ensemble interplay',
+          'harmonically adventurous but emotionally direct',
+          'soulful with enough friction to stay interesting',
+        ],
+        [
+          'favor strong interplay',
+          'avoid background-music blandness',
+          'let the arrangements breathe',
+          'keep a rhythmic thread',
+          'mix familiar language with stranger turns',
+          'avoid stacking too many long tracks in a row',
+          'favor performances with a clear point of view',
+          'let the rhythm section guide the sequence',
+          'mix acoustic warmth with occasional electric edge',
+          'keep virtuosity in service of feel',
+        ]
       );
     }
+
+    if (/(funk|soul|r&b|neo soul|motown|disco)/.test(text)) {
+      return theme(
+        [
+          'a packed kitchen during a house party',
+          'a summer block party after sunset',
+          'a slow drive with the windows down',
+          'a dance floor before it gets crowded',
+          'a Sunday afternoon with nowhere to be',
+          'a rooftop cookout at dusk',
+          'a corner bar with a very good jukebox',
+          'a warm night walking home',
+        ],
+        [
+          'groove-first and warm',
+          'silky without losing rhythmic bite',
+          'bass-led and deeply pocketed',
+          'soulful with sharp arrangements',
+          'lush but never overstuffed',
+          'danceable without becoming obvious',
+          'vocal-forward with tactile instrumentation',
+          'smooth around the edges but rhythmically alive',
+        ],
+        [
+          'favor strong basslines',
+          'keep the drums in the pocket',
+          'avoid overly polished adult-contemporary turns',
+          'mix slow burners with a few undeniable movers',
+          'favor arrangements with real dynamics',
+          'lean into deep album cuts',
+          'let horns, strings, or keys add color without clutter',
+          'keep the groove continuous even when tempos change',
+        ]
+      );
+    }
+
+    if (/(reggae|dub|ska|dancehall|rocksteady)/.test(text)) {
+      return theme(
+        [
+          'a humid late afternoon',
+          'a backyard gathering after sunset',
+          'a slow coastal drive',
+          'an open-window apartment during a summer storm',
+          'a street corner with music carrying from two blocks away',
+          'a lazy Sunday with nowhere to go',
+          'a small club with too much bass',
+          'a warm night near the water',
+        ],
+        [
+          'bass-heavy and unhurried',
+          'spacious with deep rhythmic pocket',
+          'sun-warmed but not lightweight',
+          'dubbed-out and textural',
+          'laid-back with sharp rhythmic detail',
+          'melodic with a heavy low-end center',
+          'minimal and hypnotic',
+          'bright on top with weight underneath',
+        ],
+        [
+          'keep the bass central',
+          'favor strong rhythmic interplay',
+          'avoid novelty ska detours',
+          'mix vocal tracks with instrumental space',
+          'let dub textures stretch the sequence',
+          'avoid overly slick modern production',
+          'keep the tempo changes natural',
+          'favor tracks with distinct drum and bass character',
+        ]
+      );
+    }
+
+    if (/(prog|progressive rock|math rock|mathcore|post-rock)/.test(text)) {
+      return theme(
+        [
+          'a long night drive with no traffic',
+          'a rehearsal room after everyone else leaves',
+          'a mountain road under low clouds',
+          'a train ride through unfamiliar country',
+          'a quiet room with the stereo too loud',
+          'a late afternoon that slowly turns into night',
+          'a long walk through an unfamiliar neighborhood',
+          'a storm watched from a covered porch',
+        ],
+        [
+          'intricate but still emotional',
+          'rhythmically strange with a clear payoff',
+          'expansive without becoming self-indulgent',
+          'technical but still physical',
+          'patient with sudden structural turns',
+          'melodic with unusual meter underneath',
+          'cinematic but grounded by rhythm',
+          'complex without sacrificing memorable motifs',
+        ],
+        [
+          'favor songs with a real structural arc',
+          'avoid complexity for its own sake',
+          'keep technical passages tied to a hook or mood',
+          'mix shorter tracks with a few long-form pieces',
+          'favor dynamic contrast',
+          'avoid too many slow builds in a row',
+          'let odd meters feel natural rather than academic',
+          'keep the sequence moving despite longer runtimes',
+        ]
+      );
+    }
+
+    if (/(classical|baroque|romantic|modern classical|contemporary classical|minimalism)/.test(text)) {
+      return theme(
+        [
+          'a quiet room before sunrise',
+          'a long train ride through winter',
+          'an empty museum gallery',
+          'a rainy evening with no screens on',
+          'a dark auditorium before the lights come up',
+          'a slow Sunday morning',
+          'a solitary walk through an old neighborhood',
+          'a late-night reading session',
+        ],
+        [
+          'patient and emotionally precise',
+          'ornate without becoming fussy',
+          'minimal but quietly tense',
+          'dramatic with controlled dynamics',
+          'warmly acoustic and intimate',
+          'repetitive in a hypnotic way',
+          'lyrical without becoming sentimental',
+          'architectural, spacious, and detailed',
+        ],
+        [
+          'avoid abrupt stylistic whiplash',
+          'favor pieces with strong atmosphere',
+          'mix shorter movements with a few longer works',
+          'let dynamics shape the sequence',
+          'avoid overly bombastic selections',
+          'favor emotional specificity over prestige picks',
+          'keep transitions tonally coherent',
+          'include lesser-known works when they fit better',
+        ]
+      );
+    }
+
+    if (/(pop|synthpop|power pop|art pop|indie pop)/.test(text)) {
+      return theme(
+        [
+          'a bright drive across town',
+          'a kitchen dance break',
+          'a summer evening before going out',
+          'a long walk through a busy neighborhood',
+          'a Sunday afternoon with the windows open',
+          'a city bus ride with perfect weather',
+          'a late-night convenience-store run',
+          'a rooftop before sunset',
+        ],
+        [
+          'hook-forward but not disposable',
+          'bright with a little edge',
+          'melodic and tightly arranged',
+          'polished without feeling sterile',
+          'immediate but still distinctive',
+          'catchy with interesting production underneath',
+          'energetic without becoming sugary',
+          'cleanly structured with personality',
+        ],
+        [
+          'favor memorable hooks',
+          'avoid generic chart-pop filler',
+          'mix obvious earworms with deeper cuts',
+          'keep the pacing lively',
+          'favor production details that reward repeat listens',
+          'avoid stacking too many maximalist tracks together',
+          'let one or two stranger choices break the pattern',
+          'keep choruses strong without making everything feel identical',
+        ]
+      );
+    }
+
     return theme(
-      ['a late-night drive', 'a gray afternoon', 'a long walk with headphones', 'a low-key weekend night', 'a road trip with no schedule'],
-      ['coherent and characterful', 'melodic with some edge', 'deep-cut friendly', 'textured without losing momentum', 'distinctive rather than generic'],
-      ['stay close to the artist’s musical neighborhood', 'favor deep cuts', 'make transitions feel intentional', 'avoid obvious filler', 'keep a consistent sonic thread']
+      [
+        'a late-night drive',
+        'a gray afternoon',
+        'a long walk with headphones',
+        'a low-key weekend night',
+        'a road trip with no schedule',
+        'a quiet morning before the day starts',
+        'a humid evening with the windows open',
+        'a train ride through unfamiliar neighborhoods',
+        'a long drive home after midnight',
+        'an afternoon spent digging through records',
+      ],
+      [
+        'coherent and characterful',
+        'melodic with some edge',
+        'deep-cut friendly',
+        'textured without losing momentum',
+        'distinctive rather than generic',
+        'warm but not sleepy',
+        'rhythmic with a little unpredictability',
+        'emotionally direct without being obvious',
+        'varied in texture but unified in feel',
+        'adventurous without losing the thread',
+      ],
+      [
+        'stay close to the artist’s musical neighborhood',
+        'favor deep cuts',
+        'make transitions feel intentional',
+        'avoid obvious filler',
+        'keep a consistent sonic thread',
+        'allow a few left-field choices',
+        'avoid repeating the same energy level for too long',
+        'favor songs with a strong identity',
+        'mix familiar anchors with less obvious discoveries',
+        'let production texture guide some of the sequencing',
+      ]
     );
   }
 
