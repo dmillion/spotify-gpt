@@ -112,16 +112,23 @@ html[data-theme='halloween'] {
   --crt-glow:rgba(255,105,22,.34);
 }
 
+html[data-theme='halloween'] .studio-header {
+  position:relative;
+  overflow:visible;
+}
+
 html[data-theme='halloween'] .studio-header h1 {
   position:relative;
   display:inline-block;
   isolation:isolate;
-  animation:halloween-logo-glitch 4.6s steps(1,end) infinite;
+  color:var(--ink);
+  animation:halloween-logo-base 5.4s steps(1,end) infinite;
   text-shadow:
     2px 0 0 rgba(255,122,24,.34),
-    -2px 0 0 rgba(164,84,214,.32),
-    0 0 14px rgba(255,122,24,.16);
+    -2px 0 0 rgba(164,84,214,.34),
+    0 0 16px rgba(255,122,24,.18);
 }
+
 html[data-theme='halloween'] .studio-header h1::before,
 html[data-theme='halloween'] .studio-header h1::after {
   content:attr(data-glitch);
@@ -129,150 +136,185 @@ html[data-theme='halloween'] .studio-header h1::after {
   inset:0;
   pointer-events:none;
   white-space:nowrap;
-  opacity:0;
-  mix-blend-mode:screen;
-}
-html[data-theme='halloween'] .studio-header h1::before {
-  color:var(--acid);
-  clip-path:polygon(0 6%,100% 8%,100% 28%,0 31%);
-  text-shadow:
-    3px 0 0 rgba(255,122,24,.42),
-    10px 0 0 rgba(255,122,24,.10),
-    -7px 0 0 rgba(255,122,24,.08);
-  animation:halloween-glitch-upper 3.7s steps(1,end) infinite;
-}
-html[data-theme='halloween'] .studio-header h1::after {
-  color:var(--accent-mid);
-  clip-path:polygon(0 55%,100% 52%,100% 82%,0 86%);
-  text-shadow:
-    -3px 0 0 rgba(164,84,214,.42),
-    -11px 0 0 rgba(164,84,214,.10),
-    7px 0 0 rgba(164,84,214,.08);
-  animation:halloween-glitch-lower 4.1s steps(1,end) infinite;
+  overflow:hidden;
 }
 
-/* Horizontal scanline tears that cut across the logo and spill past the glyphs. */
+html[data-theme='halloween'] .studio-header h1::before {
+  left:2px;
+  color:var(--acid);
+  text-shadow:-2px 0 #ff315d,5px 0 rgba(255,122,24,.34);
+  clip-path:inset(0 0 0 0);
+  animation:halloween-glitch-slice-a 2.9s infinite linear alternate-reverse;
+  opacity:.72;
+}
+
+html[data-theme='halloween'] .studio-header h1::after {
+  left:-2px;
+  color:var(--accent-mid);
+  text-shadow:2px 0 #65f6ff,-5px 0 rgba(164,84,214,.32);
+  clip-path:inset(0 0 0 0);
+  animation:halloween-glitch-slice-b 3.6s infinite linear alternate-reverse;
+  opacity:.58;
+}
+
+/* Thin horizontal video-tear artifacts, inspired by the CodePen's clipped text glitch. */
 html[data-theme='halloween'] .studio-header::before,
 html[data-theme='halloween'] .studio-header::after {
   content:'';
   position:absolute;
-  left:-18px;
-  right:-28px;
+  left:-30px;
+  width:min(720px,70vw);
   height:2px;
   pointer-events:none;
+  z-index:4;
   opacity:0;
-  z-index:3;
   mix-blend-mode:screen;
 }
-html[data-theme='halloween'] .studio-header {
-  position:relative;
-}
+
 html[data-theme='halloween'] .studio-header::before {
-  top:43%;
+  top:42%;
   background:linear-gradient(
     90deg,
-    transparent 0 4%,
-    rgba(255,122,24,.55) 4% 14%,
-    transparent 14% 18%,
-    rgba(164,84,214,.48) 18% 31%,
-    transparent 31% 100%
+    transparent 0 3%,
+    #ff315d 3% 9%,
+    transparent 9% 15%,
+    var(--acid) 15% 32%,
+    transparent 32% 47%,
+    #65f6ff 47% 54%,
+    transparent 54% 100%
   );
   box-shadow:
-    18px 0 0 rgba(255,122,24,.20),
-    -12px 0 0 rgba(164,84,214,.15);
-  animation:halloween-scan-tear-a 5.3s steps(1,end) infinite;
+    16px 0 0 rgba(255,49,93,.22),
+    -11px 0 0 rgba(101,246,255,.18);
+  animation:halloween-video-tear-a 4.2s steps(1,end) infinite;
 }
+
 html[data-theme='halloween'] .studio-header::after {
-  top:67%;
+  top:68%;
   height:1px;
   background:linear-gradient(
     90deg,
-    transparent 0 10%,
-    rgba(184,242,91,.42) 10% 21%,
-    transparent 21% 38%,
-    rgba(255,122,24,.52) 38% 48%,
-    transparent 48% 100%
+    transparent 0 11%,
+    var(--accent-mid) 11% 24%,
+    transparent 24% 36%,
+    var(--acid) 36% 45%,
+    transparent 45% 64%,
+    #65f6ff 64% 70%,
+    transparent 70% 100%
   );
-  animation:halloween-scan-tear-b 6.1s steps(1,end) infinite;
+  animation:halloween-video-tear-b 5.1s steps(1,end) infinite;
 }
 
-/* Slight chromatic split on major text to make the whole Halloween theme feel unstable. */
 html[data-theme='halloween'] .prompt-label,
 html[data-theme='halloween'] .section-head h2,
 html[data-theme='halloween'] .task-progress-stage-name,
 html[data-theme='halloween'] .playlist h3 {
-  animation:halloween-text-flicker 7.4s steps(1,end) infinite;
+  animation:halloween-text-aberration 7.2s steps(1,end) infinite;
   text-shadow:
-    1px 0 0 rgba(255,122,24,.16),
-    -1px 0 0 rgba(164,84,214,.14);
+    1px 0 rgba(255,49,93,.18),
+    -1px 0 rgba(101,246,255,.14);
 }
 
-@keyframes halloween-logo-glitch {
-  0%,78%,81%,84%,87%,100% {
-    transform:translate(0,0) skewX(0deg);
+@keyframes halloween-logo-base {
+  0%,74%,78%,83%,88%,100% {
+    transform:translate(0,0) skewX(0);
     filter:none;
   }
-  79% {
+  75% {
     transform:translate(-2px,0) skewX(-1deg);
-    filter:brightness(1.05);
   }
-  80% {
-    transform:translate(2px,0) skewX(1deg);
+  76% {
+    transform:translate(3px,0) skewX(1deg);
+    filter:brightness(1.08);
   }
-  82% {
-    transform:translate(-4px,1px) skewX(-2deg);
+  77% {
+    transform:translate(-1px,1px);
   }
-  83% {
+  84% {
     transform:translate(5px,-1px) skewX(2deg);
-    filter:brightness(1.12);
+    filter:brightness(1.13);
   }
   85% {
-    transform:translate(-1px,0);
+    transform:translate(-4px,0) skewX(-2deg);
   }
   86% {
     transform:translate(1px,0);
   }
+  87% {
+    transform:translate(0,0);
+  }
 }
-@keyframes halloween-glitch-upper {
-  0%,66%,100% { opacity:0; transform:translateX(0) scaleX(1); }
-  67% { opacity:.18; transform:translateX(-3px) scaleX(1.01); }
-  68% { opacity:.52; transform:translateX(10px) scaleX(1.06); }
-  69% { opacity:.28; transform:translateX(-8px) scaleX(.98); }
-  70% { opacity:0; transform:translateX(0) scaleX(1); }
-  89% { opacity:.16; transform:translateX(4px) scaleX(1.02); }
-  90% { opacity:.40; transform:translateX(-6px) scaleX(1.04); }
-  91% { opacity:0; transform:translateX(0) scaleX(1); }
+
+@keyframes halloween-glitch-slice-a {
+  0%   { clip-path:inset(8% 0 72% 0); transform:translate(-3px,0); }
+  8%   { clip-path:inset(62% 0 12% 0); transform:translate(6px,0); }
+  14%  { clip-path:inset(28% 0 54% 0); transform:translate(-8px,0); }
+  21%  { clip-path:inset(76% 0 5% 0); transform:translate(4px,0); }
+  29%  { clip-path:inset(38% 0 42% 0); transform:translate(10px,0); }
+  37%  { clip-path:inset(12% 0 66% 0); transform:translate(-5px,0); }
+  46%  { clip-path:inset(52% 0 27% 0); transform:translate(7px,0); }
+  58%  { clip-path:inset(19% 0 59% 0); transform:translate(-9px,0); }
+  68%  { clip-path:inset(69% 0 10% 0); transform:translate(5px,0); }
+  78%  { clip-path:inset(34% 0 47% 0); transform:translate(-4px,0); }
+  88%  { clip-path:inset(5% 0 79% 0); transform:translate(8px,0); }
+  100% { clip-path:inset(58% 0 18% 0); transform:translate(-6px,0); }
 }
-@keyframes halloween-glitch-lower {
-  0%,57%,100% { opacity:0; transform:translateX(0) scaleX(1); }
-  58% { opacity:.16; transform:translateX(4px) scaleX(1.01); }
-  59% { opacity:.48; transform:translateX(-11px) scaleX(1.07); }
-  60% { opacity:.24; transform:translateX(8px) scaleX(.99); }
-  61% { opacity:0; transform:translateX(0) scaleX(1); }
-  82% { opacity:.14; transform:translateX(-3px) scaleX(1.02); }
-  83% { opacity:.38; transform:translateX(7px) scaleX(1.05); }
-  84% { opacity:0; transform:translateX(0) scaleX(1); }
+
+@keyframes halloween-glitch-slice-b {
+  0%   { clip-path:inset(71% 0 9% 0); transform:translate(5px,0); }
+  9%   { clip-path:inset(23% 0 61% 0); transform:translate(-7px,0); }
+  18%  { clip-path:inset(44% 0 35% 0); transform:translate(9px,0); }
+  27%  { clip-path:inset(11% 0 73% 0); transform:translate(-4px,0); }
+  36%  { clip-path:inset(59% 0 21% 0); transform:translate(6px,0); }
+  47%  { clip-path:inset(31% 0 49% 0); transform:translate(-10px,0); }
+  57%  { clip-path:inset(80% 0 4% 0); transform:translate(4px,0); }
+  69%  { clip-path:inset(16% 0 67% 0); transform:translate(8px,0); }
+  81%  { clip-path:inset(50% 0 29% 0); transform:translate(-6px,0); }
+  91%  { clip-path:inset(36% 0 43% 0); transform:translate(5px,0); }
+  100% { clip-path:inset(7% 0 77% 0); transform:translate(-8px,0); }
 }
-@keyframes halloween-scan-tear-a {
-  0%,72%,100% { opacity:0; transform:translateX(0) scaleX(1); }
-  73% { opacity:.16; transform:translateX(-10px) scaleX(.95); }
-  74% { opacity:.62; transform:translateX(24px) scaleX(1.12); }
-  75% { opacity:.26; transform:translateX(-18px) scaleX(.90); }
-  76% { opacity:0; transform:translateX(0) scaleX(1); }
+
+@keyframes halloween-video-tear-a {
+  0%,69%,74%,100% { opacity:0; transform:translateX(0) scaleX(1); }
+  70% { opacity:.18; transform:translateX(-12px) scaleX(.94); }
+  71% { opacity:.72; transform:translateX(28px) scaleX(1.14); }
+  72% { opacity:.38; transform:translateX(-20px) scaleX(.88); }
+  73% { opacity:.12; transform:translateX(9px) scaleX(1.04); }
 }
-@keyframes halloween-scan-tear-b {
-  0%,84%,100% { opacity:0; transform:translateX(0) scaleX(1); }
-  85% { opacity:.14; transform:translateX(12px) scaleX(.96); }
-  86% { opacity:.50; transform:translateX(-22px) scaleX(1.10); }
-  87% { opacity:.22; transform:translateX(16px) scaleX(.92); }
-  88% { opacity:0; transform:translateX(0) scaleX(1); }
+
+@keyframes halloween-video-tear-b {
+  0%,81%,86%,100% { opacity:0; transform:translateX(0) scaleX(1); }
+  82% { opacity:.16; transform:translateX(14px) scaleX(.95); }
+  83% { opacity:.60; transform:translateX(-26px) scaleX(1.12); }
+  84% { opacity:.28; transform:translateX(18px) scaleX(.91); }
+  85% { opacity:.10; transform:translateX(-8px) scaleX(1.03); }
 }
-@keyframes halloween-text-flicker {
-  0%,86%,89%,92%,100% { opacity:1; }
-  87% { opacity:.90; transform:translateX(-.5px); }
-  88% { opacity:.97; transform:translateX(.5px); }
-  90% { opacity:.88; transform:translateX(0); }
-  91% { opacity:1; }
+
+@keyframes halloween-text-aberration {
+  0%,86%,90%,94%,100% {
+    transform:translateX(0);
+    text-shadow:
+      1px 0 rgba(255,49,93,.18),
+      -1px 0 rgba(101,246,255,.14);
+  }
+  87% {
+    transform:translateX(-1px);
+    text-shadow:
+      3px 0 rgba(255,49,93,.34),
+      -2px 0 rgba(101,246,255,.24);
+  }
+  88% {
+    transform:translateX(1px);
+    text-shadow:
+      1px 0 rgba(255,49,93,.22),
+      -4px 0 rgba(101,246,255,.30);
+  }
+  89% {
+    transform:translateX(0);
+  }
+  91% { opacity:.88; }
+  92% { opacity:1; }
+  93% { opacity:.94; }
 }
 
 @media (prefers-reduced-motion:reduce) {
