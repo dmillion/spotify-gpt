@@ -52,11 +52,15 @@
     const end = prompt.selectionEnd ?? start;
     const before = prompt.value.slice(0, start);
     const after = prompt.value.slice(end);
-    const needsBeforeSpace = before && !/\s$/.test(before);
+
+    const hasExistingPrompt = prompt.value.trim().length > 0;
+    const needsSeparator = hasExistingPrompt && before.trim().length > 0;
+    const separator = needsSeparator ? ' + ' : '';
     const needsAfterSpace = after && !/^\s/.test(after);
-    const insertion = `${needsBeforeSpace ? ' ' : ''}${value}${needsAfterSpace ? ' ' : ''}`;
-    prompt.value = before + insertion + after;
-    const cursor = before.length + insertion.length;
+
+    const insertion = `${separator}${value}${needsAfterSpace ? ' ' : ''}`;
+    prompt.value = before.replace(/\s+$/, '') + insertion + after;
+    const cursor = before.replace(/\s+$/, '').length + insertion.length;
     prompt.setSelectionRange(cursor, cursor);
     prompt.dispatchEvent(new Event('input', {bubbles:true}));
     prompt.focus();
