@@ -329,6 +329,20 @@
       if (token && token === activeToken) {
         if (error?.name === 'AbortError') {
           finishTask(token, false, 'STOPPED');
+        } else if (error instanceof TypeError || /load failed|failed to fetch|network/i.test(String(error?.message || error))) {
+          const panel = ensurePanel();
+          if (stageTimer) window.clearInterval(stageTimer);
+          if (elapsedTimer) window.clearInterval(elapsedTimer);
+          stageTimer = elapsedTimer = null;
+          activeRequest = false;
+          activeType = null;
+          activeController = null;
+          panel.className = 'task-progress is-active';
+          panel.querySelector('.task-progress-stage-name').textContent = 'CONNECTION INTERRUPTED — VERIFYING RESULT';
+          panel.querySelector('.task-progress-elapsed').textContent = formatElapsed(Date.now() - startedAt);
+          window.setTimeout(() => {
+            if (token === activeToken) panel.className = 'task-progress';
+          }, 3500);
         } else {
           finishTask(token, false, error?.message || String(error));
         }
