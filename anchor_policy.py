@@ -287,7 +287,13 @@ def _ground_description(generated: dict, catalog: list[dict], prompt: str = "") 
         return generated
 
     anchor = _prompt_artist_name(prompt) or ""
-    style_match = re.search(r"['’]s\s+(?P<style>[^,;:]{2,60}?)\s+side\b", str(prompt or ""), flags=re.IGNORECASE)
+    style_match = None
+    if anchor:
+        style_match = re.search(
+            re.escape(anchor) + r"['’]s\s+(?P<style>[^,;:]{2,60}?)\s+side\b",
+            str(prompt or ""),
+            flags=re.IGNORECASE,
+        )
     style = style_match.group("style").strip() if style_match else ""
     if anchor and style:
         generated["description"] = (
