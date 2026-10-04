@@ -278,7 +278,7 @@ def _description_mentions_missing_entity(description: str, selected: list[dict],
     return False
 
 
-def _ground_description(generated: dict, catalog: list[dict]) -> dict:
+def _ground_description(generated: dict, catalog: list[dict], prompt: str = "") -> dict:
     selected = list(generated.get("tracks") or [])
     description = str(generated.get("description") or "").strip()
     if not selected or not description:
@@ -286,7 +286,21 @@ def _ground_description(generated: dict, catalog: list[dict]) -> dict:
     if not _description_mentions_missing_entity(description, selected, catalog):
         return generated
 
-    generated["description"] = "A curated playlist built around the requested sound, with musically adjacent picks chosen from the final track set."
+    anchor = _prompt_artist_name(prompt) or ""
+    style_match = re.search(r"['’]s\s+(?P<style>[^,;:]{2,60}?)\s+side\b", str(prompt or ""), flags=re.IGNORECASE)
+    style = style_match.group("style").strip() if style_match else ""
+    if anchor and style:
+        generated["description"] = (
+            f"A {style}-leaning set anchored by {anchor}, expanded through closely related artists while preserving the requested mood and pacing."
+        )
+    elif anchor:
+        generated["description"] = (
+            f"A focused set anchored by {anchor}, expanded through closely related artists that preserve the requested sound and energy."
+        )
+    else:
+        generated["description"] = (
+            "A focused set built from the requested sound, using closely related artists and a coherent musical through-line."
+        )
     print("[Tune Raider] replaced ungrounded playlist description", flush=True)
     return generated
 
@@ -347,4 +361,4 @@ def ensure_prompt_anchor(
                 flush=True,
             )
 
-    return _ground_description(generated, tracks)
+    return _ground_description(generated, tracks, prompt)
