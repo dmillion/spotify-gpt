@@ -63,6 +63,7 @@ def database():
     if "source_tracks" not in columns: connection.execute("ALTER TABLE generated_playlists ADD COLUMN source_tracks TEXT NOT NULL DEFAULT '[]'")
     connection.execute("CREATE TABLE IF NOT EXISTS model_usage (id INTEGER PRIMARY KEY AUTOINCREMENT,provider TEXT NOT NULL,model TEXT NOT NULL,input_tokens INTEGER,output_tokens INTEGER,total_tokens INTEGER,created_at TEXT NOT NULL)")
     connection.execute("CREATE TABLE IF NOT EXISTS learning_events (id INTEGER PRIMARY KEY AUTOINCREMENT,event_type TEXT NOT NULL,playlist_id INTEGER,parent_playlist_id INTEGER,prompt TEXT,instruction TEXT,payload TEXT NOT NULL DEFAULT '{}',created_at TEXT NOT NULL)")
+    connection.execute("CREATE TABLE IF NOT EXISTS generation_requests (request_id TEXT PRIMARY KEY,prompt TEXT NOT NULL,status TEXT NOT NULL,stage TEXT,error TEXT,result TEXT,spotify_created INTEGER NOT NULL DEFAULT 0,spotify_written INTEGER NOT NULL DEFAULT 0,spotify_url TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)")
     connection.commit(); return connection
 
 def require_configuration():
