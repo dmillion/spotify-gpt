@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 import requests
 from flask import jsonify, render_template, request
@@ -12,34 +13,204 @@ def install(ns: dict) -> None:
     spotify = ns["spotify"]
     AppError = ns["AppError"]
 
+    def _stage_error(stage: str, prefix: str, exc: Exception, *, spotify_created=False, spotify_written=False, spotify_url=None):
+        message = str(exc).strip() or exc.__class__.__name__
+        error = AppError(
+            f"{prefix}: {message}",
+            getattr(exc, "status_code", 502),
+            getattr(exc, "help_url", None),
+        )
+        error.stage = stage
+        error.spotify_created = bool(spotify_created)
+        error.spotify_written = bool(spotify_written)
+        error.spotify_url = spotify_url
+        raise error from exc
+
     def create_from_prompt(prompt: str, excluded_tracks: list[str] | None = None) -> dict:
         ns["require_configuration"]()
-        generated = ns["ask_for_hybrid_playlist"](prompt, excluded_tracks)
-        token = spotify.get_access_token()
-        resolved = []; missing = []; seen_uris = set()
-        for requested in generated["tracks"]:
-            req = spotify.TrackRequest(requested["artist"], requested["title"])
-            track = spotify.search_track(token, req)
-            if track and track.get("uri") not in seen_uris:
-                resolved.append(track); seen_uris.add(track["uri"])
-            elif not track:
-                missing.append(f"{requested['artist']} - {requested['title']}")
+        try:
+            generated = ns["ask_for_hybrid_playlist"](prompt, excluded_tracks)
+        except Exception as exc:
+            _stage_error("curation", "Playlist curation failed", exc)
+
+        try:
+            token = spotify.get_access_token()
+        except Exception as exc:
+            _stage_error("spotify_auth", "Spotify authorization failed", exc)
+
+        resolved = []
+        missing = []
+        seen_uris = set()
+        try:
+            for requested in generated["tracks"]:
+                req = spotify.TrackRequest(requested["artist"], requested["title"])
+                track = spotify.search_track(token, req)
+                if track and track.get("uri") not in seen_uris:
+                    resolved.append(track)
+                    seen_uris.add(track["uri"])
+                elif not track:
+                    missing.append(f"{requested['artist']} - {requested['title']}")
+        except Exception as exc:
+            _stage_error("spotify_resolution", "Spotify track resolution failed", exc)
+
         if not resolved:
-            raise AppError("Spotify could not resolve any tracks from the generated playlist.")
+            error = AppError("Spotify could not resolve any tracks from the generated playlist.")
+            error.stage = "spotify_resolution"
+            error.spotify_created = False
+            error.spotify_written = False
+            error.spotify_url = None
+            raise error
+
         description = str(generated.get("description") or spotify.DEFAULT_DESCRIPTION).strip()
-        playlist = spotify.create_playlist(token, name=str(generated.get("name") or "New Playlist").strip(), description=description, public=False)
-        spotify.add_items(token, playlist["id"], [track["uri"] for track in resolved])
-        tracks = [{"artist": ", ".join(a["name"] for a in track.get("artists", [])), "title": track["name"], "url": track.get("external_urls", {}).get("spotify")} for track in resolved]
-        result = {"prompt": prompt, "name": playlist.get("name", generated.get("name", "New Playlist")), "description": description,
-                  "tracks": tracks, "spotify_url": playlist.get("external_urls", {}).get("spotify"), "missing": missing,
-                  "source": "hybrid", "source_tracks": generated["tracks"], "created_at": datetime.now(timezone.utc).isoformat()}
-        with ns["database"]() as connection:
-            cursor = connection.execute(
-                "INSERT INTO generated_playlists (prompt, name, description, tracks, spotify_url, created_at, source, source_tracks) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (result["prompt"], result["name"], result["description"], json.dumps(tracks), result["spotify_url"], result["created_at"], result["source"], json.dumps(generated["tracks"])),
+        name = str(generated.get("name") or "New Playlist").strip()
+        playlist = None
+        spotify_url = None
+        try:
+            playlist = spotify.create_playlist(token, name=name, description=description, public=False)
+            spotify_url = playlist.get("external_urls", {}).get("spotify")
+        except Exception as exc:
+            _stage_error("spotify_create", "Spotify playlist creation failed", exc)
+
+        try:
+            spotify.add_items(token, playlist["id"], [track["uri"] for track in resolved])
+        except Exception as exc:
+            _stage_error(
+                "spotify_write",
+                "Spotify created the playlist, but adding tracks failed",
+                exc,
+                spotify_created=True,
+                spotify_written=False,
+                spotify_url=spotify_url,
             )
-            result["id"] = cursor.lastrowid
+
+        tracks = [
+            {
+                "artist": ", ".join(a["name"] for a in track.get("artists", [])),
+                "title": track["name"],
+                "url": track.get("external_urls", {}).get("spotify"),
+            }
+            for track in resolved
+        ]
+        result = {
+            "prompt": prompt,
+            "name": playlist.get("name", generated.get("name", "New Playlist")),
+            "description": description,
+            "tracks": tracks,
+            "spotify_url": spotify_url,
+            "missing": missing,
+            "source": "hybrid",
+            "source_tracks": generated["tracks"],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "spotify_written": True,
+        }
+        try:
+            with ns["database"]() as connection:
+                cursor = connection.execute(
+                    "INSERT INTO generated_playlists (prompt, name, description, tracks, spotify_url, created_at, source, source_tracks) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        result["prompt"], result["name"], result["description"], json.dumps(tracks),
+                        result["spotify_url"], result["created_at"], result["source"], json.dumps(generated["tracks"]),
+                    ),
+                )
+                result["id"] = cursor.lastrowid
+        except Exception as exc:
+            _stage_error(
+                "history_save",
+                "Spotify playlist was written, but Tune Raider could not save local history",
+                exc,
+                spotify_created=True,
+                spotify_written=True,
+                spotify_url=spotify_url,
+            )
         return result
+
+    def _generation_request_id(value) -> str:
+        request_id = str(value or "").strip()
+        if not request_id:
+            return ""
+        if len(request_id) > 128 or not re.fullmatch(r"[A-Za-z0-9._:-]+", request_id):
+            raise AppError("Invalid generation request ID.", 400)
+        return request_id
+
+    def _generation_job_payload(row) -> dict:
+        if not row:
+            return {"status": "missing"}
+        payload = {
+            "request_id": row["request_id"],
+            "status": row["status"],
+            "stage": row["stage"],
+            "error": row["error"],
+            "spotify_created": bool(row["spotify_created"]),
+            "spotify_written": bool(row["spotify_written"]),
+            "spotify_url": row["spotify_url"],
+        }
+        if row["result"]:
+            try:
+                payload["result"] = json.loads(row["result"])
+            except (TypeError, ValueError):
+                payload["result"] = None
+        payload["retryable"] = row["status"] == "failed" and not bool(row["spotify_created"])
+        return payload
+
+    def _generation_job(request_id: str):
+        with ns["database"]() as connection:
+            return connection.execute(
+                "SELECT * FROM generation_requests WHERE request_id = ?",
+                (request_id,),
+            ).fetchone()
+
+    def _begin_generation_job(request_id: str, prompt: str, retry: bool) -> tuple[str, dict | None]:
+        now = datetime.now(timezone.utc).isoformat()
+        with ns["database"]() as connection:
+            row = connection.execute(
+                "SELECT * FROM generation_requests WHERE request_id = ?",
+                (request_id,),
+            ).fetchone()
+            if row:
+                state = _generation_job_payload(row)
+                if row["status"] == "complete":
+                    return "complete", state.get("result")
+                if row["status"] == "running":
+                    return "running", None
+                if row["status"] == "failed":
+                    if not retry:
+                        return "failed", state
+                    if row["spotify_created"]:
+                        return "failed", state
+                    connection.execute(
+                        "UPDATE generation_requests SET status='running',stage='curation',error=NULL,result=NULL,spotify_created=0,spotify_written=0,spotify_url=NULL,updated_at=? WHERE request_id=?",
+                        (now, request_id),
+                    )
+                    return "start", None
+            connection.execute(
+                "INSERT INTO generation_requests (request_id,prompt,status,stage,created_at,updated_at) VALUES (?,?,?,?,?,?)",
+                (request_id, prompt, "running", "curation", now, now),
+            )
+        return "start", None
+
+    def _finish_generation_job(request_id: str, result: dict) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with ns["database"]() as connection:
+            connection.execute(
+                "UPDATE generation_requests SET status='complete',stage='complete',error=NULL,result=?,spotify_created=1,spotify_written=1,spotify_url=?,updated_at=? WHERE request_id=?",
+                (json.dumps(result), result.get("spotify_url"), now, request_id),
+            )
+
+    def _fail_generation_job(request_id: str, exc: Exception) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with ns["database"]() as connection:
+            connection.execute(
+                "UPDATE generation_requests SET status='failed',stage=?,error=?,spotify_created=?,spotify_written=?,spotify_url=?,updated_at=? WHERE request_id=?",
+                (
+                    str(getattr(exc, "stage", "unknown")),
+                    str(exc),
+                    1 if getattr(exc, "spotify_created", False) else 0,
+                    1 if getattr(exc, "spotify_written", False) else 0,
+                    getattr(exc, "spotify_url", None),
+                    now,
+                    request_id,
+                ),
+            )
 
     def row_to_result(row) -> dict:
         return {"id": row["id"], "source": row["source"], "source_tracks": json.loads(row["source_tracks"]), "prompt": row["prompt"],
@@ -166,14 +337,60 @@ def install(ns: dict) -> None:
             latest = connection.execute("SELECT * FROM model_usage WHERE provider='ollama' ORDER BY id DESC LIMIT 1").fetchone()
         return jsonify(**totals, provider="ollama", configured_model=ns["OLLAMA_MODEL"], latest=dict(latest) if latest else None)
 
+    @app.get("/api/generation-status/<request_id>")
+    def generation_status(request_id: str):
+        try:
+            request_id = _generation_request_id(request_id)
+        except AppError as exc:
+            return jsonify({"error": str(exc)}), exc.status_code
+        row = _generation_job(request_id)
+        if not row:
+            return jsonify({"status": "missing", "request_id": request_id}), 404
+        return jsonify(_generation_job_payload(row))
+
     @app.post("/api/generate")
     def generate():
         body = request.get_json(silent=True) or {}
         prompt = str(body.get("prompt", "")).strip()
-        if not prompt: return jsonify({"error": "Tell me what kind of playlist you want first."}), 400
-        try: return jsonify(create_from_prompt(prompt))
+        if not prompt:
+            return jsonify({"error": "Tell me what kind of playlist you want first."}), 400
+
+        try:
+            request_id = _generation_request_id(body.get("request_id"))
+        except AppError as exc:
+            return jsonify({"error": str(exc)}), exc.status_code
+
+        # Older clients may omit request_id; preserve the direct request path.
+        if not request_id:
+            try:
+                return jsonify(create_from_prompt(prompt))
+            except (AppError, requests.RequestException, spotify.SpotifyError) as exc:
+                return jsonify({
+                    "error": str(exc),
+                    "stage": getattr(exc, "stage", None),
+                    "spotify_created": bool(getattr(exc, "spotify_created", False)),
+                    "spotify_written": bool(getattr(exc, "spotify_written", False)),
+                    "spotify_url": getattr(exc, "spotify_url", None),
+                    "help_url": getattr(exc, "help_url", None),
+                }), getattr(exc, "status_code", 502)
+
+        state, existing = _begin_generation_job(request_id, prompt, bool(body.get("retry")))
+        if state == "complete":
+            return jsonify(existing)
+        if state == "running":
+            return jsonify({"status": "running", "request_id": request_id}), 202
+        if state == "failed":
+            return jsonify(existing), 409
+
+        try:
+            result = create_from_prompt(prompt)
+            _finish_generation_job(request_id, result)
+            return jsonify(result)
         except (AppError, requests.RequestException, spotify.SpotifyError) as exc:
-            return jsonify({"error": str(exc), "help_url": getattr(exc, "help_url", None)}), getattr(exc, "status_code", 502)
+            _fail_generation_job(request_id, exc)
+            payload = _generation_job_payload(_generation_job(request_id))
+            payload["help_url"] = getattr(exc, "help_url", None)
+            return jsonify(payload), getattr(exc, "status_code", 502)
 
     @app.post("/api/history/<int:playlist_id>/regenerate")
     def regenerate(playlist_id: int):
@@ -187,4 +404,4 @@ def install(ns: dict) -> None:
 
     ns.update({"create_from_prompt": create_from_prompt, "row_to_result": row_to_result, "home": home,
                "library_status": library_status, "history": history, "token_usage": token_usage,
-               "generate": generate, "regenerate": regenerate})
+               "generate": generate, "generation_status": generation_status, "regenerate": regenerate})
