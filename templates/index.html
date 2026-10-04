@@ -61,6 +61,7 @@
   <p id="library-info" class="meta" aria-live="polite">Checking MP3 index…</p>
   </section>
   <div class="status" id="status" role="status"></div>
+  <button type="button" id="retry-build" class="retry-build" hidden>Check / retry playlist</button>
   <p id="error-help" hidden><a id="error-help-link" target="_blank" rel="noopener noreferrer">Open OpenAI settings ↗</a></p>
   </div>
   <details class="usage">
@@ -800,7 +801,11 @@
       return `<article class="playlist"><div><div class="eyebrow">${escapeHtml(sourceLabel)}${escapeHtml(item.prompt)}</div><h3>${escapeHtml(item.name)}</h3><p>${escapeHtml(item.description)}</p><div class="tracks">${item.tracks.slice(0,12).map(track => `<span class="track">${escapeHtml(track.artist)} / ${escapeHtml(track.title)}</span>`).join('')}${item.tracks.length > 12 ? `<span class="track">+${item.tracks.length - 12} more</span>` : ''}</div></div><div class="actions"><span class="meta date">${dateLabel(item.created_at)}</span>${item.spotify_url ? `<a href="${escapeHtml(item.spotify_url)}" target="_blank" rel="noreferrer">Open in Spotify ↗</a>` : ''}<button class="regen" data-id="${item.id}">Regenerate ↻</button></div></article>`;
     }).join('');
   }
-  async function loadHistory() { const response = await fetch('/api/history'); render(await response.json()); }
+  async function loadHistory() {
+    const response = await fetch('/api/history', {cache:'no-store'});
+    if (!response.ok) throw new Error(`History refresh failed (HTTP ${response.status}).`);
+    render(await response.json());
+  }
   async function loadUsage() {
     try {
       const response = await fetch('/api/usage', {cache:'no-store'});
@@ -819,13 +824,171 @@
       document.querySelector('#usage-detail').textContent = 'Usage unavailable. Any displayed counts may be out of date; retrying automatically.';
     }
   }
-  async function submit(url, body) {
+  const retryBuild = document.querySelector('#retry-build');
+  let pendingGeneration = null;
+
+  function generationRequestId() {
+    if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+    return `gen-${Date.now()}-${Math.random().toString(36).slice(2,12)}`;
+  }
+
+  function stageLabel(stage) {
+    return ({
+      curation:'curation / candidate selection',
+      spotify_auth:'Spotify authorization',
+      spotify_resolution:'Spotify track resolution',
+      spotify_create:'Spotify playlist creation',
+      spotify_write:'writing tracks to Spotify',
+      history_save:'saving Tune Raider history',
+      complete:'complete',
+    })[stage] || stage || 'unknown stage';
+  }
+
+  function hideRetry() {
+    retryBuild.hidden = true;
+    pendingGeneration = null;
+  }
+
+  function showRetry(context, label='Check / retry playlist') {
+    pendingGeneration = context;
+    retryBuild.textContent = label;
+    retryBuild.hidden = false;
+  }
+
+  async function finishSuccessfulBuild(data, recovered=false) {
+    hideRetry();
+    const missing = data.missing?.length
+      ? ` ${data.missing.length} unavailable on Spotify: ${data.missing.join('; ')}`
+      : '';
+    status.textContent = `${recovered ? 'Connection recovered. ' : ''}Spotify write confirmed: built “${data.name}” with ${data.tracks.length} tracks.${missing}`;
+    promptBox.value = '';
+    rotatePromptPlaceholder();
+
+    try {
+      await loadHistory();
+    } catch (error) {
+      status.textContent += ` Playlist creation succeeded, but the Tune Raider history refresh failed: ${error.message}`;
+    }
+  }
+
+  async function generationState(requestId) {
+    const response = await fetch(`/api/generation-status/${encodeURIComponent(requestId)}`, {cache:'no-store'});
+    const data = await response.json().catch(() => ({}));
+    if (response.status === 404) return {status:'missing', request_id:requestId};
+    if (!response.ok) throw new Error(data.error || `Status check failed (HTTP ${response.status}).`);
+    return data;
+  }
+
+  async function reconcileGeneration(context, attempts=30) {
+    status.textContent = 'The browser/tunnel connection was interrupted. Checking the server before deciding whether the Spotify write failed…';
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try {
+        const state = await generationState(context.requestId);
+        if (state.status === 'complete' && state.result) {
+          await finishSuccessfulBuild(state.result, true);
+          return true;
+        }
+        if (state.status === 'failed') {
+          const where = stageLabel(state.stage);
+          if (state.spotify_written) {
+            status.textContent = `Spotify write succeeded, but Tune Raider failed during ${where}: ${state.error || 'unknown error'}`;
+            if (state.spotify_url) status.textContent += ' The playlist should already be in Spotify.';
+            return false;
+          }
+          if (state.spotify_created) {
+            status.textContent = `Spotify created the playlist, but the build failed during ${where}: ${state.error || 'unknown error'} Do not retry automatically because a partial playlist already exists in Spotify.`;
+            return false;
+          }
+          status.textContent = `Build failed during ${where}: ${state.error || 'unknown error'}`;
+          if (state.retryable) showRetry(context, 'Retry playlist write');
+          return false;
+        }
+        if (state.status === 'missing') {
+          status.textContent = 'The connection failed before Tune Raider could confirm that the request reached the server.';
+          showRetry(context, 'Retry playlist write');
+          return false;
+        }
+        status.textContent = `Connection interrupted, but the server is still working on the playlist (${stageLabel(state.stage)}). Waiting for confirmation…`;
+      } catch (error) {
+        status.textContent = `The tunnel/browser connection is still unavailable, so Tune Raider cannot confirm the Spotify result yet: ${error.message}`;
+        showRetry(context, 'Check / retry playlist');
+        return false;
+      }
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+    status.textContent = 'The original request is still running or its result is not yet confirmed. Use Check / retry; the request ID prevents a confirmed build from being duplicated.';
+    showRetry(context, 'Check / retry playlist');
+    return false;
+  }
+
+  async function submit(url, body, options={}) {
     if (button.disabled) return;
     document.querySelector('#error-help').hidden = true;
-    button.disabled = true; status.textContent = 'CURATING / RESOLVING / GENERATING...';
-    try { const response = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)}); const data = await response.json(); if (!response.ok) { if (['https://platform.openai.com/settings/organization/billing/', 'https://platform.openai.com/settings/organization/limits'].includes(data.help_url)) { const link = document.querySelector('#error-help-link'); link.href = data.help_url; link.textContent = data.help_url.includes('/billing/') ? 'Open OpenAI API billing ↗' : 'Open OpenAI API limits ↗'; document.querySelector('#error-help').hidden = false; } throw new Error(data.error || 'Something went wrong.'); } status.textContent = `Built “${data.name}” with ${data.tracks.length} resolved tracks.${data.missing?.length ? ` ${data.missing.length} unavailable on Spotify: ${data.missing.join('; ')}` : ''}`; promptBox.value = ''; rotatePromptPlaceholder(); await loadHistory(); }
-    catch (error) { status.textContent = error.message; } finally { button.disabled = false; await loadUsage(); }
+    hideRetry();
+    button.disabled = true;
+    status.textContent = 'CURATING / RESOLVING / GENERATING...';
+
+    const isGenerate = /\/api\/generate(?:\?|$)/.test(url);
+    const requestId = isGenerate ? (options.requestId || generationRequestId()) : null;
+    const payload = {...body};
+    if (requestId) payload.request_id = requestId;
+    if (options.retry) payload.retry = true;
+    const context = requestId ? {url, body:{prompt:payload.prompt}, requestId} : null;
+
+    try {
+      const response = await fetch(url, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(payload),
+      });
+      const data = await response.json().catch(() => ({}));
+
+      if (response.status === 202 && context) {
+        await reconcileGeneration(context);
+        return;
+      }
+
+      if (!response.ok) {
+        if (['https://platform.openai.com/settings/organization/billing/', 'https://platform.openai.com/settings/organization/limits'].includes(data.help_url)) {
+          const link = document.querySelector('#error-help-link');
+          link.href = data.help_url;
+          link.textContent = data.help_url.includes('/billing/') ? 'Open OpenAI API billing ↗' : 'Open OpenAI API limits ↗';
+          document.querySelector('#error-help').hidden = false;
+        }
+        if (context && data.status === 'failed') {
+          const where = stageLabel(data.stage);
+          if (data.spotify_written) {
+            status.textContent = `Spotify write succeeded, but Tune Raider failed during ${where}: ${data.error || 'unknown error'}`;
+          } else if (data.spotify_created) {
+            status.textContent = `Spotify created the playlist, but the build failed during ${where}: ${data.error || 'unknown error'} A partial playlist may exist in Spotify.`;
+          } else {
+            status.textContent = `Build failed during ${where}: ${data.error || 'unknown error'}`;
+            if (data.retryable !== false) showRetry(context, 'Retry playlist write');
+          }
+          return;
+        }
+        throw new Error(data.error || `Request failed (HTTP ${response.status}).`);
+      }
+
+      await finishSuccessfulBuild(data);
+    } catch (error) {
+      if (context && (error instanceof TypeError || /load failed|failed to fetch|network/i.test(String(error.message)))) {
+        await reconcileGeneration(context);
+      } else {
+        status.textContent = error.message;
+      }
+    } finally {
+      button.disabled = false;
+      try { await loadUsage(); } catch (_) {}
+    }
   }
+
+  retryBuild.addEventListener('click', async () => {
+    if (!pendingGeneration) return;
+    const context = pendingGeneration;
+    retryBuild.hidden = true;
+    await submit(context.url, context.body, {requestId:context.requestId, retry:true});
+  });
   button.addEventListener('click', () => submit('/api/generate', {prompt:promptBox.value}));
   promptBox.addEventListener('keydown', event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') button.click(); });
   history.addEventListener('click', event => { if (event.target.matches('.regen')) submit(`/api/history/${event.target.dataset.id}/regenerate`, {}); });
