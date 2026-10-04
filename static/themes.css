@@ -482,13 +482,34 @@ html[data-theme='halloween'] .studio-header.halloween-glitch-burst::after {
 
 html {
   min-height:100%;
+  width:100%;
+  max-width:100%;
+  overflow-x:hidden;
   color-scheme:dark;
   background:radial-gradient(ellipse at 50% 0%,var(--glow),transparent 60%),var(--paper);
 }
 body {
   min-height:100vh;
+  width:100%;
+  max-width:100%;
+  overflow-x:hidden;
   line-height:1.5;
   background:transparent;
+}
+main,
+.workspace,
+.compose-column,
+.input-panel,
+.composer,
+.history-panel,
+.history,
+.playlist,
+.playlist > div,
+.tracks,
+.workstation-bar,
+.theme-control {
+  min-width:0;
+  max-width:100%;
 }
 body:before {
   position:absolute;
@@ -1029,19 +1050,166 @@ html[data-crt='on'] .signal-primary {
   .usage-grid > div:first-child, .usage-grid > div:nth-child(2) { grid-column:auto; }
 }
 @media (max-width:700px) {
-  main { width:min(100% - 28px,1180px); padding-top:18px; }
-  .workstation-bar { align-items:flex-start; }
-  .theme-control { justify-content:flex-end; }
-  .studio-header { margin:20px 0; }
+  main {
+    width:100%;
+    max-width:100%;
+    margin:0;
+    padding:18px 14px 56px;
+  }
+
+  .workstation-bar {
+    width:100%;
+    align-items:flex-start;
+    justify-content:flex-start;
+  }
+
+  .theme-control {
+    width:100%;
+    justify-content:flex-start;
+    gap:8px;
+  }
+
+  .theme-control select {
+    flex:1 1 180px;
+    min-width:0;
+    width:auto;
+    font-size:16px;
+  }
+
+  .crt-control { flex:0 0 auto; }
+  .studio-header { margin:20px 0; max-width:100%; }
   .signal-panel { margin-bottom:32px; }
   .signal-panel svg { height:26px; }
-  .composer textarea { min-height:170px; padding:20px 46px 20px 18px; font-size:19px; }
-  .composer-actions { flex-direction:column; }
+
+  .composer,
+  .composer textarea {
+    width:100%;
+    max-width:100%;
+    min-width:0;
+  }
+
+  .composer textarea {
+    min-height:170px;
+    padding:20px 46px 20px 18px;
+    font-size:18px;
+  }
+
+  .composer-actions {
+    width:100%;
+    flex-direction:column;
+  }
+
   .composer-actions .generate,
-  .composer-actions .idea-button { width:100%; min-width:0; }
+  .composer-actions .idea-button {
+    width:100%;
+    min-width:0;
+  }
+
+  textarea,
+  input,
+  select {
+    font-size:16px;
+  }
+
+  .usage,
+  .usage-body {
+    width:100%;
+    max-width:100%;
+  }
+
+  .usage {
+    padding:0;
+    overflow:hidden;
+  }
+
+  .usage-body { padding:14px 12px 12px; }
   .usage-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
-  .usage-grid > div:first-child, .usage-grid > div:nth-child(2) { grid-column:auto; }
-  .playlist { padding:24px 12px 26px 14px; }
-  .playlist h3 { font-size:25px; }
-  .actions { min-width:0; }
+  .usage-grid > div:first-child,
+  .usage-grid > div:nth-child(2) { grid-column:auto; }
+
+  .playlist {
+    width:100%;
+    max-width:100%;
+    padding:24px 12px 26px 14px;
+    overflow:hidden;
+  }
+
+  .playlist h3 {
+    max-width:100%;
+    font-size:25px;
+    overflow-wrap:anywhere;
+  }
+
+  .playlist p,
+  .playlist .eyebrow,
+  .status,
+  #library-info,
+  .usage-note {
+    max-width:100%;
+    overflow-wrap:anywhere;
+    word-break:break-word;
+  }
+
+  .tracks {
+    width:100%;
+    max-width:100%;
+    overflow:hidden;
+  }
+
+  .track {
+    min-width:0;
+    max-width:100%;
+    overflow-wrap:anywhere;
+    word-break:break-word;
+  }
+
+  .actions {
+    min-width:0;
+    max-width:100%;
+    flex-wrap:wrap;
+  }
+
+  .actions a,
+  .actions button {
+    max-width:100%;
+    white-space:normal;
+  }
+
+  html[data-crt='on'] body > main,
+  html[data-crt='on'] body > .login-main {
+    transform:none;
+    border-radius:0;
+    animation:crt-content-flicker-mobile 3.2s steps(1,end) infinite;
+  }
+
+  html[data-theme='halloween'] .studio-header {
+    max-width:100%;
+    overflow:hidden;
+  }
+
+  html[data-theme='halloween'] .studio-header h1 {
+    max-width:100%;
+    font-size:clamp(28px,10vw,48px);
+    overflow-wrap:anywhere;
+  }
+
+  html[data-theme='halloween'] .studio-header::before,
+  html[data-theme='halloween'] .studio-header::after {
+    left:0;
+    width:100%;
+  }
+}
+
+@keyframes crt-content-flicker-mobile {
+  0%,5%,8%,19%,22%,40%,43%,61%,64%,79%,82%,100% { opacity:1; }
+  6% { opacity:.972; }
+  7% { opacity:.995; }
+  20% { opacity:.955; }
+  21% { opacity:.985; }
+  41% { opacity:.968; }
+  42% { opacity:1; }
+  62% { opacity:.948; }
+  63% { opacity:.992; }
+  80% { opacity:.962; }
+  81% { opacity:1; }
 }
