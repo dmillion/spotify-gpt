@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 from datetime import datetime, timezone
 import requests
 from flask import jsonify, render_template, request
@@ -26,18 +27,25 @@ def install(ns: dict) -> None:
         error.spotify_url = spotify_url
         raise error from exc
 
-    def create_from_prompt(prompt: str, excluded_tracks: list[str] | None = None) -> dict:
+    def create_from_prompt(prompt: str, excluded_tracks: list[str] | None = None, stage_callback=None) -> dict:
+        def stage(name: str) -> None:
+            if stage_callback:
+                stage_callback(name)
+
         ns["require_configuration"]()
+        stage("curation")
         try:
             generated = ns["ask_for_hybrid_playlist"](prompt, excluded_tracks)
         except Exception as exc:
             _stage_error("curation", "Playlist curation failed", exc)
 
+        stage("spotify_auth")
         try:
             token = spotify.get_access_token()
         except Exception as exc:
             _stage_error("spotify_auth", "Spotify authorization failed", exc)
 
+        stage("spotify_resolution")
         resolved = []
         missing = []
         seen_uris = set()
@@ -65,12 +73,14 @@ def install(ns: dict) -> None:
         name = str(generated.get("name") or "New Playlist").strip()
         playlist = None
         spotify_url = None
+        stage("spotify_create")
         try:
             playlist = spotify.create_playlist(token, name=name, description=description, public=False)
             spotify_url = playlist.get("external_urls", {}).get("spotify")
         except Exception as exc:
             _stage_error("spotify_create", "Spotify playlist creation failed", exc)
 
+        stage("spotify_write")
         try:
             spotify.add_items(token, playlist["id"], [track["uri"] for track in resolved])
         except Exception as exc:
@@ -103,6 +113,7 @@ def install(ns: dict) -> None:
             "created_at": datetime.now(timezone.utc).isoformat(),
             "spotify_written": True,
         }
+        stage("history_save")
         try:
             with ns["database"]() as connection:
                 cursor = connection.execute(
@@ -211,6 +222,43 @@ def install(ns: dict) -> None:
                     request_id,
                 ),
             )
+
+
+    def _update_generation_stage(request_id: str, stage: str) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with ns["database"]() as connection:
+            connection.execute(
+                "UPDATE generation_requests SET stage=?,updated_at=? WHERE request_id=? AND status='running'",
+                (stage, now, request_id),
+            )
+
+    def _run_generation_job(request_id: str, prompt: str) -> None:
+        """Run a generation independently of the browser request that queued it."""
+        try:
+            result = create_from_prompt(
+                prompt,
+                stage_callback=lambda stage: _update_generation_stage(request_id, stage),
+            )
+            _finish_generation_job(request_id, result)
+        except Exception as exc:
+            try:
+                _fail_generation_job(request_id, exc)
+            except Exception as persist_exc:
+                print(
+                    f"[Tune Raider] async generation {request_id} failed and status persistence also failed: "
+                    f"{persist_exc}",
+                    flush=True,
+                )
+            print(f"[Tune Raider] async generation {request_id} failed: {exc}", flush=True)
+
+    def _launch_generation_job(request_id: str, prompt: str) -> None:
+        worker = threading.Thread(
+            target=_run_generation_job,
+            args=(request_id, prompt),
+            name=f"tune-raider-generation-{request_id[:12]}",
+            daemon=True,
+        )
+        worker.start()
 
     def row_to_result(row) -> dict:
         return {"id": row["id"], "source": row["source"], "source_tracks": json.loads(row["source_tracks"]), "prompt": row["prompt"],
@@ -378,19 +426,17 @@ def install(ns: dict) -> None:
         if state == "complete":
             return jsonify(existing)
         if state == "running":
-            return jsonify({"status": "running", "request_id": request_id}), 202
+            return jsonify({"status": "running", "stage": _generation_job(request_id)["stage"], "request_id": request_id}), 202
         if state == "failed":
             return jsonify(existing), 409
 
-        try:
-            result = create_from_prompt(prompt)
-            _finish_generation_job(request_id, result)
-            return jsonify(result)
-        except (AppError, requests.RequestException, spotify.SpotifyError) as exc:
-            _fail_generation_job(request_id, exc)
-            payload = _generation_job_payload(_generation_job(request_id))
-            payload["help_url"] = getattr(exc, "help_url", None)
-            return jsonify(payload), getattr(exc, "status_code", 502)
+        _launch_generation_job(request_id, prompt)
+        return jsonify({
+            "status": "queued",
+            "stage": "curation",
+            "request_id": request_id,
+            "message": "Playlist generation is running on the Tune Raider server. You can leave this page.",
+        }), 202
 
     @app.post("/api/history/<int:playlist_id>/regenerate")
     def regenerate(playlist_id: int):
