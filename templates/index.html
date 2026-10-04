@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <title>Tune Raider</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap');
@@ -26,7 +26,7 @@
     .tracks { margin-top:14px; display:flex; flex-wrap:wrap; gap:6px; } .track { border:1px solid var(--line); padding:6px 9px; font:11px 'DM Mono',monospace; color:#4e5851; }
     .actions { display:flex; flex-direction:column; align-items:flex-end; gap:10px; } .date { white-space:nowrap; } .regen { background:var(--acid); color:var(--ink); padding:11px 14px; border:1px solid var(--ink); } .regen:hover { background:#b5d453; }
     a { color:var(--ink); font:500 11px 'DM Mono',monospace; text-transform:uppercase; } .empty { color:var(--muted); padding:25px 0; }
-    @media (max-width:700px) { main { width:min(100% - 28px,1180px); padding-top:30px; } header { margin-bottom:30px; } .mark { width:58px; height:58px; font-size:9px; } .composer { grid-template-columns:1fr; } .generate { min-height:62px; border-left:0; border-top:2px solid var(--ink); } .playlist { grid-template-columns:1fr; } .actions { flex-direction:row; align-items:center; } }
+    @media (max-width:700px) { main { width:100%; max-width:100%; padding:30px 14px 56px; } header { margin-bottom:30px; } .mark { width:58px; height:58px; font-size:9px; } .composer { grid-template-columns:minmax(0,1fr); width:100%; } .generate { min-height:62px; border-left:0; border-top:2px solid var(--ink); } .playlist { grid-template-columns:minmax(0,1fr); width:100%; } .actions { flex-direction:row; align-items:center; flex-wrap:wrap; } }
     .usage { margin:0 0 32px; padding:20px; border:1px solid var(--ink); background:#fffdf8; }
     .usage h2 { font-size:18px; }
     .usage-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:18px; margin:18px 0; }
