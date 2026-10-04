@@ -826,6 +826,7 @@
   }
   const retryBuild = document.querySelector('#retry-build');
   let pendingGeneration = null;
+  const activeGenerationKey = 'tune-raider-active-generation';
 
   function generationRequestId() {
     if (window.crypto?.randomUUID) return window.crypto.randomUUID();
@@ -849,14 +850,31 @@
     pendingGeneration = null;
   }
 
+  function saveActiveGeneration(context) {
+    try { localStorage.setItem(activeGenerationKey, JSON.stringify(context)); } catch (_) {}
+  }
+
+  function clearActiveGeneration(requestId) {
+    try {
+      const current = JSON.parse(localStorage.getItem(activeGenerationKey) || 'null');
+      if (!requestId || current?.requestId === requestId) localStorage.removeItem(activeGenerationKey);
+    } catch (_) { localStorage.removeItem(activeGenerationKey); }
+  }
+
+  function savedActiveGeneration() {
+    try { return JSON.parse(localStorage.getItem(activeGenerationKey) || 'null'); }
+    catch (_) { return null; }
+  }
+
   function showRetry(context, label='Check / retry playlist') {
     pendingGeneration = context;
     retryBuild.textContent = label;
     retryBuild.hidden = false;
   }
 
-  async function finishSuccessfulBuild(data, recovered=false) {
+  async function finishSuccessfulBuild(data, recovered=false, requestId=null) {
     hideRetry();
+    clearActiveGeneration(requestId);
     const missing = data.missing?.length
       ? ` ${data.missing.length} unavailable on Spotify: ${data.missing.join('; ')}`
       : '';
@@ -879,16 +897,18 @@
     return data;
   }
 
-  async function reconcileGeneration(context, attempts=30) {
-    status.textContent = 'The browser/tunnel connection was interrupted. Checking the server before deciding whether the Spotify write failed…';
+  async function reconcileGeneration(context, attempts=180) {
+    saveActiveGeneration(context);
+    status.textContent = 'Playlist queued on your Tune Raider machine. You can leave this page; generation will continue server-side.';
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
         const state = await generationState(context.requestId);
         if (state.status === 'complete' && state.result) {
-          await finishSuccessfulBuild(state.result, true);
+          await finishSuccessfulBuild(state.result, true, context.requestId);
           return true;
         }
         if (state.status === 'failed') {
+          clearActiveGeneration(context.requestId);
           const where = stageLabel(state.stage);
           if (state.spotify_written) {
             status.textContent = `Spotify write succeeded, but Tune Raider failed during ${where}: ${state.error || 'unknown error'}`;
@@ -904,20 +924,21 @@
           return false;
         }
         if (state.status === 'missing') {
-          status.textContent = 'The connection failed before Tune Raider could confirm that the request reached the server.';
+          status.textContent = 'The server no longer has this generation request. You can retry it safely.';
+          clearActiveGeneration(context.requestId);
           showRetry(context, 'Retry playlist write');
           return false;
         }
-        status.textContent = `Connection interrupted, but the server is still working on the playlist (${stageLabel(state.stage)}). Waiting for confirmation…`;
+        status.textContent = `Generating on your Tune Raider machine — ${stageLabel(state.stage)}. You can leave this page.`;
       } catch (error) {
-        status.textContent = `The tunnel/browser connection is still unavailable, so Tune Raider cannot confirm the Spotify result yet: ${error.message}`;
-        showRetry(context, 'Check / retry playlist');
+        status.textContent = `Generation is still assigned to your Tune Raider machine, but this browser cannot currently check it: ${error.message} Reopen the app later to resume status checks.`;
+        showRetry(context, 'Check playlist status');
         return false;
       }
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
-    status.textContent = 'The original request is still running or its result is not yet confirmed. Use Check / retry; the request ID prevents a confirmed build from being duplicated.';
-    showRetry(context, 'Check / retry playlist');
+    status.textContent = 'Generation is still assigned to your Tune Raider machine. Reopen the app later to check the result.';
+    showRetry(context, 'Check playlist status');
     return false;
   }
 
@@ -944,6 +965,7 @@
       const data = await response.json().catch(() => ({}));
 
       if (response.status === 202 && context) {
+        saveActiveGeneration(context);
         await reconcileGeneration(context);
         return;
       }
@@ -970,7 +992,7 @@
         throw new Error(data.error || `Request failed (HTTP ${response.status}).`);
       }
 
-      await finishSuccessfulBuild(data);
+      await finishSuccessfulBuild(data, false, requestId);
     } catch (error) {
       if (context && (error instanceof TypeError || /load failed|failed to fetch|network/i.test(String(error.message)))) {
         await reconcileGeneration(context);
@@ -1000,6 +1022,11 @@
   loadHistory();
   loadUsage();
   loadPromptIdeas();
+  const resumedGeneration = savedActiveGeneration();
+  if (resumedGeneration?.requestId && resumedGeneration?.body?.prompt) {
+    pendingGeneration = resumedGeneration;
+    reconcileGeneration(resumedGeneration);
+  }
   setInterval(() => { if (!document.hidden) loadUsage(); }, 10000);
   setInterval(() => { if (!document.hidden) rotatePromptPlaceholder(); }, 9000);
 </script>
