@@ -86,11 +86,28 @@ def _prompt_artist_name(prompt: str) -> str | None:
     if not text:
         return None
 
+    # Tune It Up emits prompts such as:
+    # "Start with DILLY DALLY's garage rock side and build toward ..."
+    # Resolve the possessive style clause back to the actual artist before the
+    # generic start/anchor patterns below can swallow "garage rock side".
+    possessive = re.search(
+        r"(?:start|starting|begin|anchor)\s+(?:with|from|on)\s+"
+        r"(?P<artist>.+)['’]s\s+[^,;:]+?\s+side"
+        r"(?=\s*(?:[,.;:]|\band\s+(?:then\s+)?(?:branch|build|move|keep)\b)|$)",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if possessive:
+        artist = possessive.group("artist").strip(" \"'“”‘’")
+        artist = re.sub(r"^(?:some|more)\s+", "", artist, flags=re.IGNORECASE).strip()
+        if artist and 2 <= len(artist) <= 120:
+            return artist
+
     patterns = [
-        r"(?:songs?|tracks?|music|stuff|artists?)\s+(?:more\s+)?like\s+(?P<artist>.+?)(?=\s*(?:[,.;]|\b(?:with|for|but|that|which|where|and\s+(?:keep|make|favor|lean|avoid))\b)|$)",
-        r"(?:start|starting|begin|anchor)\s+(?:with|from|on)\s+(?P<artist>.+?)(?=\s*(?:[,.;]|\b(?:with|for|but|that|which|where|and\s+(?:then|branch|build|move|keep))\b)|$)",
-        r"(?:inspired\s+by|based\s+on|around)\s+(?P<artist>.+?)(?=\s*(?:[,.;]|\b(?:with|for|but|that|which|where|and\s+(?:keep|make|favor|lean|avoid))\b)|$)",
-        r"(?:give|find|show)\s+me\s+(?:more\s+)?(?P<artist>[A-Z0-9][^,;]{1,80}?)(?=\s*(?:[,.;]|\b(?:songs?|tracks?|music)\b)|$)",
+        r"(?:songs?|tracks?|music|stuff|artists?)\s+(?:more\s+)?like\s+(?P<artist>.+?)(?=\s*(?:[,.;:]|\b(?:with|for|but|that|which|where|and\s+(?:keep|make|favor|lean|avoid))\b)|$)",
+        r"(?:start|starting|begin|anchor)\s+(?:with|from|on)\s+(?P<artist>.+?)(?=\s*(?:[,.;:]|\b(?:with|for|but|that|which|where|and\s+(?:then|branch|build|move|keep))\b)|$)",
+        r"(?:inspired\s+by|based\s+on|around)\s+(?P<artist>.+?)(?=\s*(?:[,.;:]|\b(?:with|for|but|that|which|where|and\s+(?:keep|make|favor|lean|avoid))\b)|$)",
+        r"(?:give|find|show)\s+me\s+(?:more\s+)?(?P<artist>[A-Z0-9][^,;:]{1,80}?)(?=\s*(?:[,.;:]|\b(?:songs?|tracks?|music)\b)|$)",
     ]
     for pattern in patterns:
         match = re.search(pattern, text, flags=re.IGNORECASE)
