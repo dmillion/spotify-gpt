@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import time
 from datetime import datetime, timezone
+from urllib.parse import urlsplit
 import requests
 
 
@@ -31,6 +32,41 @@ def install(ns: dict) -> None:
         if not isinstance(result, dict):
             raise AppError("Ollama returned structured JSON, but the top-level value was not an object.")
         return result
+
+    def unload_ollama_model() -> bool:
+        """Release a locally loaded Ollama model without stopping the Ollama service."""
+        api_url = str(ns["OLLAMA_API_URL"] or "").strip()
+        parsed = urlsplit(api_url)
+        host = (parsed.hostname or "").casefold()
+        if host not in {"127.0.0.1", "localhost", "::1"}:
+            return False
+
+        header_name = "Author" + "ization"
+        headers = {"Content-Type": "application/json"}
+        api_key = str(ns["os"].environ.get("OLLAMA_API_KEY", "")).strip()
+        if api_key:
+            headers[header_name] = "Bearer " + api_key
+
+        try:
+            response = requests.post(
+                api_url,
+                headers=headers,
+                json={
+                    "model": ns["OLLAMA_MODEL"],
+                    "stream": False,
+                    "keep_alive": 0,
+                    "messages": [],
+                },
+                timeout=min(ns["OLLAMA_TIMEOUT"], 30),
+            )
+            ns["check_ollama_response"](response)
+            print(f"[Ollama] unloaded {ns['OLLAMA_MODEL']} from memory", flush=True)
+            return True
+        except Exception as exc:
+            # Model cleanup must never turn an otherwise successful playlist build
+            # into a failure.
+            print(f"[Ollama] model unload failed: {exc}", flush=True)
+            return False
 
     def model_json(instructions: str, prompt: str, schema: dict, *, stage: str = "request") -> dict:
         started = time.monotonic()
@@ -70,3 +106,4 @@ def install(ns: dict) -> None:
 
     ns["parse_model_json"] = parse_model_json
     ns["model_json"] = model_json
+    ns["unload_ollama_model"] = unload_ollama_model
