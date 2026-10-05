@@ -13,6 +13,8 @@ def install(ns: dict) -> None:
     app = ns["app"]
     spotify = ns["spotify"]
     AppError = ns["AppError"]
+    generation_worker_lock = threading.Lock()
+    active_generation_workers = 0
 
     def _stage_error(stage: str, prefix: str, exc: Exception, *, spotify_created=False, spotify_written=False, spotify_url=None):
         message = str(exc).strip() or exc.__class__.__name__
@@ -234,6 +236,10 @@ def install(ns: dict) -> None:
 
     def _run_generation_job(request_id: str, prompt: str) -> None:
         """Run a generation independently of the browser request that queued it."""
+        nonlocal active_generation_workers
+        with generation_worker_lock:
+            active_generation_workers += 1
+
         try:
             result = create_from_prompt(
                 prompt,
@@ -250,6 +256,16 @@ def install(ns: dict) -> None:
                     flush=True,
                 )
             print(f"[Tune Raider] async generation {request_id} failed: {exc}", flush=True)
+        finally:
+            unload_model = False
+            with generation_worker_lock:
+                active_generation_workers = max(0, active_generation_workers - 1)
+                unload_model = active_generation_workers == 0
+
+            if unload_model:
+                unload = ns.get("unload_ollama_model")
+                if callable(unload):
+                    unload()
 
     def _launch_generation_job(request_id: str, prompt: str) -> None:
         worker = threading.Thread(
