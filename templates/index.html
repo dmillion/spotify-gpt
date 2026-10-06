@@ -904,7 +904,7 @@
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
         const state = await generationState(context.requestId);
-        window.TuneRaiderProgress?.setServerProgress(state.stage, state.progress);
+        window.TuneRaiderProgress?.setServerProgress(state.stage, state.progress, state.queue_position);
         if (state.status === 'complete' && state.result) {
           await finishSuccessfulBuild(state.result, true, context.requestId);
           return true;
@@ -931,7 +931,9 @@
           showRetry(context, 'Retry playlist write');
           return false;
         }
-        status.textContent = `Generating on your Tune Raider machine — ${stageLabel(state.stage)}. You can leave this page.`;
+        status.textContent = state.status === 'queued'
+          ? `Queued on your Tune Raider machine${state.queue_position ? ` — position ${state.queue_position}` : ''}. It will start automatically; you can leave this page.`
+          : `Generating on your Tune Raider machine — ${stageLabel(state.stage)}. You can leave this page.`;
       } catch (error) {
         status.textContent = `Generation is still assigned to your Tune Raider machine, but this browser cannot currently check it: ${error.message} Reopen the app later to resume status checks.`;
         showRetry(context, 'Check playlist status');
@@ -973,6 +975,11 @@
       }
 
       if (!response.ok) {
+        if (response.status === 429 && data.status === 'queue_full') {
+          clearActiveGeneration(requestId);
+          status.textContent = data.error || 'Tune Raider generation queue is full. Try again after a current build finishes.';
+          return;
+        }
         if (['https://platform.openai.com/settings/organization/billing/', 'https://platform.openai.com/settings/organization/limits'].includes(data.help_url)) {
           const link = document.querySelector('#error-help-link');
           link.href = data.help_url;
