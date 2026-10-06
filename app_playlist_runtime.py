@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import os
+import queue
 import re
 import threading
 from datetime import datetime, timezone
@@ -14,7 +16,9 @@ def install(ns: dict) -> None:
     spotify = ns["spotify"]
     AppError = ns["AppError"]
     generation_worker_lock = threading.Lock()
-    active_generation_workers = 0
+    generation_queue = queue.Queue()
+    generation_queue_limit = max(1, int(os.environ.get("GENERATION_QUEUE_LIMIT", "3")))
+    generation_worker_started = False
 
     def _stage_error(stage: str, prefix: str, exc: Exception, *, spotify_created=False, spotify_written=False, spotify_url=None):
         message = str(exc).strip() or exc.__class__.__name__
@@ -158,6 +162,14 @@ def install(ns: dict) -> None:
             "spotify_written": bool(row["spotify_written"]),
             "spotify_url": row["spotify_url"],
         }
+        if row["status"] == "queued":
+            with ns["database"]() as connection:
+                ahead = connection.execute(
+                    "SELECT COUNT(*) FROM generation_requests WHERE status='queued' AND created_at < ?",
+                    (row["created_at"],),
+                ).fetchone()[0]
+            payload["queue_position"] = int(ahead) + 1
+            payload["queue_limit"] = generation_queue_limit
         if row["result"]:
             try:
                 payload["result"] = json.loads(row["result"])
@@ -186,19 +198,29 @@ def install(ns: dict) -> None:
                     return "complete", state.get("result")
                 if row["status"] == "running":
                     return "running", None
+                if row["status"] == "queued":
+                    return "queued", None
                 if row["status"] == "failed":
                     if not retry:
                         return "failed", state
                     if row["spotify_created"]:
                         return "failed", state
+                    queued_count = connection.execute("SELECT COUNT(*) FROM generation_requests WHERE status='queued'").fetchone()[0]
+                    running_count = connection.execute("SELECT COUNT(*) FROM generation_requests WHERE status='running'").fetchone()[0]
+                    if running_count and queued_count >= generation_queue_limit:
+                        return "full", None
                     connection.execute(
-                        "UPDATE generation_requests SET status='running',stage='curation',progress=5,error=NULL,result=NULL,spotify_created=0,spotify_written=0,spotify_url=NULL,updated_at=? WHERE request_id=?",
+                        "UPDATE generation_requests SET status='queued',stage='queued',progress=0,error=NULL,result=NULL,spotify_created=0,spotify_written=0,spotify_url=NULL,updated_at=? WHERE request_id=?",
                         (now, request_id),
                     )
                     return "start", None
+            queued_count = connection.execute("SELECT COUNT(*) FROM generation_requests WHERE status='queued'").fetchone()[0]
+            running_count = connection.execute("SELECT COUNT(*) FROM generation_requests WHERE status='running'").fetchone()[0]
+            if running_count and queued_count >= generation_queue_limit:
+                return "full", None
             connection.execute(
                 "INSERT INTO generation_requests (request_id,prompt,status,stage,progress,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
-                (request_id, prompt, "running", "curation", 5, now, now),
+                (request_id, prompt, "queued", "queued", 0, now, now),
             )
         return "start", None
 
@@ -248,11 +270,14 @@ def install(ns: dict) -> None:
         print(f"[Tune Raider] generation {request_id[:12]}: {stage} ({progress}%)", flush=True)
 
     def _run_generation_job(request_id: str, prompt: str) -> None:
-        """Run a generation independently of the browser request that queued it."""
-        nonlocal active_generation_workers
-        with generation_worker_lock:
-            active_generation_workers += 1
-
+        """Run exactly one queued generation at a time."""
+        now = datetime.now(timezone.utc).isoformat()
+        with ns["database"]() as connection:
+            connection.execute(
+                "UPDATE generation_requests SET status='running',stage='curation',progress=5,updated_at=? WHERE request_id=?",
+                (now, request_id),
+            )
+        print(f"[Tune Raider] starting queued generation {request_id[:12]}", flush=True)
         try:
             result = create_from_prompt(
                 prompt,
@@ -264,30 +289,44 @@ def install(ns: dict) -> None:
                 _fail_generation_job(request_id, exc)
             except Exception as persist_exc:
                 print(
-                    f"[Tune Raider] async generation {request_id} failed and status persistence also failed: "
-                    f"{persist_exc}",
+                    f"[Tune Raider] queued generation {request_id} failed and status persistence also failed: {persist_exc}",
                     flush=True,
                 )
-            print(f"[Tune Raider] async generation {request_id} failed: {exc}", flush=True)
-        finally:
-            unload_model = False
-            with generation_worker_lock:
-                active_generation_workers = max(0, active_generation_workers - 1)
-                unload_model = active_generation_workers == 0
+            print(f"[Tune Raider] queued generation {request_id} failed: {exc}", flush=True)
 
-            if unload_model:
-                unload = ns.get("unload_ollama_model")
-                if callable(unload):
-                    unload()
+    def _generation_queue_worker() -> None:
+        while True:
+            request_id, prompt = generation_queue.get()
+            try:
+                _run_generation_job(request_id, prompt)
+            finally:
+                generation_queue.task_done()
+                if generation_queue.empty():
+                    unload = ns.get("unload_ollama_model")
+                    if callable(unload):
+                        unload()
+
+    def _ensure_generation_worker() -> None:
+        nonlocal generation_worker_started
+        with generation_worker_lock:
+            if generation_worker_started:
+                return
+            worker = threading.Thread(
+                target=_generation_queue_worker,
+                name="tune-raider-generation-worker",
+                daemon=True,
+            )
+            worker.start()
+            generation_worker_started = True
 
     def _launch_generation_job(request_id: str, prompt: str) -> None:
-        worker = threading.Thread(
-            target=_run_generation_job,
-            args=(request_id, prompt),
-            name=f"tune-raider-generation-{request_id[:12]}",
-            daemon=True,
+        _ensure_generation_worker()
+        generation_queue.put((request_id, prompt))
+        print(
+            f"[Tune Raider] queued generation {request_id[:12]} "
+            f"(pending in memory: {generation_queue.qsize()})",
+            flush=True,
         )
-        worker.start()
 
     def row_to_result(row) -> dict:
         return {"id": row["id"], "source": row["source"], "source_tracks": json.loads(row["source_tracks"]), "prompt": row["prompt"],
@@ -454,9 +493,16 @@ def install(ns: dict) -> None:
         state, existing = _begin_generation_job(request_id, prompt, bool(body.get("retry")))
         if state == "complete":
             return jsonify(existing)
-        if state == "running":
-            running_job = _generation_job(request_id)
-            return jsonify({"status": "running", "stage": running_job["stage"], "progress": int(running_job["progress"] or 0), "request_id": request_id}), 202
+        if state in {"running", "queued"}:
+            current_job = _generation_job(request_id)
+            return jsonify(_generation_job_payload(current_job)), 202
+        if state == "full":
+            return jsonify({
+                "error": f"Tune Raider is busy. The queue is limited to {generation_queue_limit} waiting playlist builds.",
+                "status": "queue_full",
+                "queue_limit": generation_queue_limit,
+                "retryable": True,
+            }), 429
         if state == "failed":
             return jsonify(existing), 409
 
@@ -464,8 +510,9 @@ def install(ns: dict) -> None:
         _launch_generation_job(request_id, prompt)
         return jsonify({
             "status": "queued",
-            "stage": "curation",
-            "progress": 5,
+            "stage": "queued",
+            "progress": 0,
+            "queue_limit": generation_queue_limit,
             "request_id": request_id,
             "message": "Playlist generation is running on the Tune Raider server. You can leave this page.",
         }), 202
