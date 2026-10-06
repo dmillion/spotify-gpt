@@ -214,14 +214,16 @@
     panel.querySelector('.task-progress-stage-name').textContent = task.stages[safeIndex][0];
   }
 
-  function setServerProgress(stage, progress) {
+  function setServerProgress(stage, progress, queuePosition=null) {
     const panel = ensurePanel();
     const value = Math.max(0, Math.min(100, Number(progress) || 0));
-    const labels = {curation:'CURATING / DISCOVERING CANDIDATES',spotify_auth:'AUTHORIZING SPOTIFY',spotify_resolution:'RESOLVING TRACKS WITH SPOTIFY',spotify_create:'CREATING SPOTIFY PLAYLIST',spotify_write:'WRITING TRACKS TO SPOTIFY',history_save:'SAVING TUNE RAIDER HISTORY',complete:'COMPLETE'};
+    const labels = {queued:'QUEUED ON TUNE RAIDER',curation:'CURATING / DISCOVERING CANDIDATES',spotify_auth:'AUTHORIZING SPOTIFY',spotify_resolution:'RESOLVING TRACKS WITH SPOTIFY',spotify_create:'CREATING SPOTIFY PLAYLIST',spotify_write:'WRITING TRACKS TO SPOTIFY',history_save:'SAVING TUNE RAIDER HISTORY',complete:'COMPLETE'};
     panel.className = value >= 100 ? 'task-progress is-complete' : 'task-progress is-active';
     panel.querySelector('.task-progress-stage-name').textContent = labels[stage] || String(stage || 'SERVER WORKER ACTIVE').toUpperCase();
     panel.querySelector('.task-progress-bar-fill').style.width = value + '%';
-    panel.querySelector('.task-progress-percent').textContent = value + '% · ' + (value >= 100 ? 'COMPLETE' : 'SERVER WORKER ACTIVE');
+    panel.querySelector('.task-progress-percent').textContent = stage === 'queued'
+      ? (queuePosition ? 'QUEUE POSITION ' + queuePosition + ' · WAITING' : 'WAITING FOR SERVER WORKER')
+      : value + '% · ' + (value >= 100 ? 'COMPLETE' : 'SERVER WORKER ACTIVE');
   }
 
   window.TuneRaiderProgress = {setServerProgress};
