@@ -64,6 +64,8 @@ def database():
     connection.execute("CREATE TABLE IF NOT EXISTS model_usage (id INTEGER PRIMARY KEY AUTOINCREMENT,provider TEXT NOT NULL,model TEXT NOT NULL,input_tokens INTEGER,output_tokens INTEGER,total_tokens INTEGER,created_at TEXT NOT NULL)")
     connection.execute("CREATE TABLE IF NOT EXISTS learning_events (id INTEGER PRIMARY KEY AUTOINCREMENT,event_type TEXT NOT NULL,playlist_id INTEGER,parent_playlist_id INTEGER,prompt TEXT,instruction TEXT,payload TEXT NOT NULL DEFAULT '{}',created_at TEXT NOT NULL)")
     connection.execute("CREATE TABLE IF NOT EXISTS generation_requests (request_id TEXT PRIMARY KEY,prompt TEXT NOT NULL,status TEXT NOT NULL,stage TEXT,error TEXT,result TEXT,spotify_created INTEGER NOT NULL DEFAULT 0,spotify_written INTEGER NOT NULL DEFAULT 0,spotify_url TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)")
+    generation_columns = {row[1] for row in connection.execute("PRAGMA table_info(generation_requests)")}
+    if "progress" not in generation_columns: connection.execute("ALTER TABLE generation_requests ADD COLUMN progress INTEGER NOT NULL DEFAULT 0")
     connection.commit(); return connection
 
 def require_configuration():
