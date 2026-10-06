@@ -152,6 +152,7 @@ def install(ns: dict) -> None:
             "request_id": row["request_id"],
             "status": row["status"],
             "stage": row["stage"],
+            "progress": int(row["progress"] or 0),
             "error": row["error"],
             "spotify_created": bool(row["spotify_created"]),
             "spotify_written": bool(row["spotify_written"]),
@@ -191,13 +192,13 @@ def install(ns: dict) -> None:
                     if row["spotify_created"]:
                         return "failed", state
                     connection.execute(
-                        "UPDATE generation_requests SET status='running',stage='curation',error=NULL,result=NULL,spotify_created=0,spotify_written=0,spotify_url=NULL,updated_at=? WHERE request_id=?",
+                        "UPDATE generation_requests SET status='running',stage='curation',progress=5,error=NULL,result=NULL,spotify_created=0,spotify_written=0,spotify_url=NULL,updated_at=? WHERE request_id=?",
                         (now, request_id),
                     )
                     return "start", None
             connection.execute(
-                "INSERT INTO generation_requests (request_id,prompt,status,stage,created_at,updated_at) VALUES (?,?,?,?,?,?)",
-                (request_id, prompt, "running", "curation", now, now),
+                "INSERT INTO generation_requests (request_id,prompt,status,stage,progress,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
+                (request_id, prompt, "running", "curation", 5, now, now),
             )
         return "start", None
 
@@ -205,7 +206,7 @@ def install(ns: dict) -> None:
         now = datetime.now(timezone.utc).isoformat()
         with ns["database"]() as connection:
             connection.execute(
-                "UPDATE generation_requests SET status='complete',stage='complete',error=NULL,result=?,spotify_created=1,spotify_written=1,spotify_url=?,updated_at=? WHERE request_id=?",
+                "UPDATE generation_requests SET status='complete',stage='complete',progress=100,error=NULL,result=?,spotify_created=1,spotify_written=1,spotify_url=?,updated_at=? WHERE request_id=?",
                 (json.dumps(result), result.get("spotify_url"), now, request_id),
             )
 
@@ -226,13 +227,25 @@ def install(ns: dict) -> None:
             )
 
 
+    GENERATION_PROGRESS = {
+        "curation": 8,
+        "spotify_auth": 58,
+        "spotify_resolution": 68,
+        "spotify_create": 86,
+        "spotify_write": 92,
+        "history_save": 97,
+        "complete": 100,
+    }
+
     def _update_generation_stage(request_id: str, stage: str) -> None:
         now = datetime.now(timezone.utc).isoformat()
+        progress = GENERATION_PROGRESS.get(stage, 5)
         with ns["database"]() as connection:
             connection.execute(
-                "UPDATE generation_requests SET stage=?,updated_at=? WHERE request_id=? AND status='running'",
-                (stage, now, request_id),
+                "UPDATE generation_requests SET stage=?,progress=?,updated_at=? WHERE request_id=? AND status='running'",
+                (stage, progress, now, request_id),
             )
+        print(f"[Tune Raider] generation {request_id[:12]}: {stage} ({progress}%)", flush=True)
 
     def _run_generation_job(request_id: str, prompt: str) -> None:
         """Run a generation independently of the browser request that queued it."""
@@ -442,14 +455,17 @@ def install(ns: dict) -> None:
         if state == "complete":
             return jsonify(existing)
         if state == "running":
-            return jsonify({"status": "running", "stage": _generation_job(request_id)["stage"], "request_id": request_id}), 202
+            running_job = _generation_job(request_id)
+            return jsonify({"status": "running", "stage": running_job["stage"], "progress": int(running_job["progress"] or 0), "request_id": request_id}), 202
         if state == "failed":
             return jsonify(existing), 409
 
+        print(f"[Tune Raider] queued generation {request_id[:12]} from client request", flush=True)
         _launch_generation_job(request_id, prompt)
         return jsonify({
             "status": "queued",
             "stage": "curation",
+            "progress": 5,
             "request_id": request_id,
             "message": "Playlist generation is running on the Tune Raider server. You can leave this page.",
         }), 202
