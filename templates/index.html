@@ -899,10 +899,12 @@
 
   async function reconcileGeneration(context, attempts=180) {
     saveActiveGeneration(context);
-    status.textContent = 'Playlist queued on your Tune Raider machine. You can leave this page; generation will continue server-side.';
+    status.textContent = 'Playlist queued on your Tune Raider machine. The progress indicator below reports server-side work; you can leave this page.';
+    window.TuneRaiderProgress?.setServerProgress('curation', 5);
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {
         const state = await generationState(context.requestId);
+        window.TuneRaiderProgress?.setServerProgress(state.stage, state.progress);
         if (state.status === 'complete' && state.result) {
           await finishSuccessfulBuild(state.result, true, context.requestId);
           return true;
