@@ -120,6 +120,9 @@
         color:var(--muted);
         font:500 11px 'DM Mono',monospace;
       }
+      .task-progress-bar { width:min(360px,100%); height:5px; overflow:hidden; border:1px solid color-mix(in srgb,var(--line-strong) 62%,transparent); background:color-mix(in srgb,var(--control) 72%,transparent); }
+      .task-progress-bar-fill { display:block; width:0%; height:100%; background:var(--acid); box-shadow:0 0 8px var(--crt-glow); transition:width .55s ease-out; }
+      .task-progress-percent { color:var(--muted); font:500 10px/1.3 'DM Mono',monospace; letter-spacing:.05em; }
       .task-progress-wave {
         display:flex;
         align-items:center;
@@ -190,6 +193,8 @@
       <div class="task-progress-stage">
         <div class="task-progress-stage-main">
           <div class="task-progress-stage-name"></div>
+          <div class="task-progress-bar" aria-hidden="true"><span class="task-progress-bar-fill"></span></div>
+          <div class="task-progress-percent">0% · SERVER WORKER ACTIVE</div>
           <div class="task-progress-wave" aria-hidden="true">
             <span></span><span></span><span></span><span></span>
             <span></span><span></span><span></span><span></span>
@@ -208,6 +213,18 @@
     const safeIndex = Math.min(index, task.stages.length - 1);
     panel.querySelector('.task-progress-stage-name').textContent = task.stages[safeIndex][0];
   }
+
+  function setServerProgress(stage, progress) {
+    const panel = ensurePanel();
+    const value = Math.max(0, Math.min(100, Number(progress) || 0));
+    const labels = {curation:'CURATING / DISCOVERING CANDIDATES',spotify_auth:'AUTHORIZING SPOTIFY',spotify_resolution:'RESOLVING TRACKS WITH SPOTIFY',spotify_create:'CREATING SPOTIFY PLAYLIST',spotify_write:'WRITING TRACKS TO SPOTIFY',history_save:'SAVING TUNE RAIDER HISTORY',complete:'COMPLETE'};
+    panel.className = value >= 100 ? 'task-progress is-complete' : 'task-progress is-active';
+    panel.querySelector('.task-progress-stage-name').textContent = labels[stage] || String(stage || 'SERVER WORKER ACTIVE').toUpperCase();
+    panel.querySelector('.task-progress-bar-fill').style.width = value + '%';
+    panel.querySelector('.task-progress-percent').textContent = value + '% · ' + (value >= 100 ? 'COMPLETE' : 'SERVER WORKER ACTIVE');
+  }
+
+  window.TuneRaiderProgress = {setServerProgress};
 
   function formatElapsed(ms) {
     const seconds = Math.max(0, Math.floor(ms / 1000));
@@ -233,6 +250,8 @@
     activeRequest = true;
     panel.className = 'task-progress is-active';
     panel.querySelector('.task-progress-elapsed').textContent = '0:00';
+    panel.querySelector('.task-progress-bar-fill').style.width = '3%';
+    panel.querySelector('.task-progress-percent').textContent = '3% · SUBMITTING';
     setStage(panel, task, 0);
 
     const legacyStatus = document.querySelector('#status');
@@ -263,7 +282,11 @@
     activeType = null;
     activeController = null;
     panel.className = `task-progress ${ok ? 'is-complete' : 'is-error'}`;
-    panel.querySelector('.task-progress-stage-name').textContent = ok ? 'COMPLETE' : (message || 'REQUEST FAILED');
+    panel.querySelector('.task-progress-stage-name').textContent = ok ? 'QUEUED ON SERVER' : (message || 'REQUEST FAILED');
+    if (ok) {
+      panel.querySelector('.task-progress-bar-fill').style.width = '5%';
+      panel.querySelector('.task-progress-percent').textContent = '5% · SERVER WORKER ACTIVE';
+    }
     panel.querySelector('.task-progress-elapsed').textContent = formatElapsed(Date.now() - startedAt);
     if (ok) window.setTimeout(() => {
       if (token === activeToken) panel.className = 'task-progress';
