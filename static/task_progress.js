@@ -112,7 +112,7 @@
         color:var(--warm-accent,var(--red));
         font:500 12px/1.4 'DM Mono',monospace;
         letter-spacing:.055em;
-        white-space:nowrap;
+        overflow-wrap:anywhere;
       }
       .task-progress-elapsed {
         min-width:54px;
@@ -221,6 +221,7 @@
     panel.className = value >= 100 ? 'task-progress is-complete' : 'task-progress is-active';
     panel.querySelector('.task-progress-stage-name').textContent = labels[stage] || String(stage || 'SERVER WORKER ACTIVE').toUpperCase();
     panel.querySelector('.task-progress-bar-fill').style.width = value + '%';
+    panel.querySelector('.task-progress-wave').style.opacity = stage === 'queued' ? '.25' : '.78';
     panel.querySelector('.task-progress-percent').textContent = stage === 'queued'
       ? (queuePosition ? 'QUEUE POSITION ' + queuePosition + ' · WAITING' : 'WAITING FOR SERVER WORKER')
       : value + '% · ' + (value >= 100 ? 'COMPLETE' : 'SERVER WORKER ACTIVE');
@@ -274,7 +275,7 @@
     return token;
   }
 
-  function finishTask(token, ok, message = '') {
+  function finishTask(token, ok, message = '', serverQueued = false) {
     if (!token || token !== activeToken) return;
     const panel = ensurePanel();
     if (stageTimer) window.clearInterval(stageTimer);
@@ -283,14 +284,14 @@
     activeRequest = false;
     activeType = null;
     activeController = null;
-    panel.className = `task-progress ${ok ? 'is-complete' : 'is-error'}`;
+    panel.className = `task-progress ${serverQueued ? 'is-active' : (ok ? 'is-complete' : 'is-error')}`;
     panel.querySelector('.task-progress-stage-name').textContent = ok ? 'QUEUED ON SERVER' : (message || 'REQUEST FAILED');
     if (ok) {
       panel.querySelector('.task-progress-bar-fill').style.width = '5%';
       panel.querySelector('.task-progress-percent').textContent = '5% · SERVER WORKER ACTIVE';
     }
     panel.querySelector('.task-progress-elapsed').textContent = formatElapsed(Date.now() - startedAt);
-    if (ok) window.setTimeout(() => {
+    if (ok && !serverQueued) window.setTimeout(() => {
       if (token === activeToken) panel.className = 'task-progress';
     }, 2200);
   }
@@ -339,7 +340,7 @@
     try {
       const response = await nativeFetch(...args);
       if (token) {
-        if (response.ok) finishTask(token, true);
+        if (response.ok) finishTask(token, true, '', response.status === 202 && type === 'generate');
         else {
           let detail = `HTTP ${response.status}`;
           try {
