@@ -66,8 +66,6 @@ def database():
     connection.execute("CREATE TABLE IF NOT EXISTS generation_requests (request_id TEXT PRIMARY KEY,prompt TEXT NOT NULL,status TEXT NOT NULL,stage TEXT,error TEXT,result TEXT,spotify_created INTEGER NOT NULL DEFAULT 0,spotify_written INTEGER NOT NULL DEFAULT 0,spotify_url TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL)")
     generation_columns = {row[1] for row in connection.execute("PRAGMA table_info(generation_requests)")}
     if "progress" not in generation_columns: connection.execute("ALTER TABLE generation_requests ADD COLUMN progress INTEGER NOT NULL DEFAULT 0")
-    # A process restart cannot resume an in-memory worker. Requeue any request that was active when the process stopped.
-    connection.execute("UPDATE generation_requests SET status='queued',stage='queued',progress=0 WHERE status='running'")
     connection.commit(); return connection
 
 def require_configuration():
