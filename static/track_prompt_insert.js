@@ -30,7 +30,14 @@
   `;
   document.head.appendChild(style);
 
+  function isTrackReference(track) {
+    const value = String(track.textContent || '').trim();
+    return Boolean(value && value.includes(' / ') && !/^\+\d+\s+more$/i.test(value));
+  }
+
   function trackReference(track) {
+    if (!isTrackReference(track)) return '';
+
     const raw = String(track.textContent || '').replace(/\s+/g, ' ').trim();
     if (!raw) return '';
 
@@ -68,7 +75,7 @@
 
   function enhanceTracks() {
     document.querySelectorAll('.playlist .track').forEach(track => {
-      if (track.dataset.promptInsertReady === '1') return;
+      if (!isTrackReference(track) || track.dataset.promptInsertReady === '1') return;
       track.dataset.promptInsertReady = '1';
       track.tabIndex = 0;
       track.setAttribute('role', 'button');
@@ -87,14 +94,14 @@
 
   document.addEventListener('click', event => {
     const track = event.target.closest('.playlist .track');
-    if (!track) return;
+    if (!track || !isTrackReference(track)) return;
     event.preventDefault();
     addTrack(track);
   });
 
   document.addEventListener('keydown', event => {
     const track = event.target.closest?.('.playlist .track');
-    if (!track || (event.key !== 'Enter' && event.key !== ' ')) return;
+    if (!track || !isTrackReference(track) || (event.key !== 'Enter' && event.key !== ' ')) return;
     event.preventDefault();
     addTrack(track);
   });
