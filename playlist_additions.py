@@ -198,7 +198,7 @@ def _add_to_playlist_locked(playlist_id: int, count: int, stage_callback=None):
     with tr.database() as connection:
         row = connection.execute("SELECT * FROM generated_playlists WHERE id = ?", (playlist_id,)).fetchone()
     if not row:
-        return jsonify({"error": "That playlist is no longer in local history."}), 404
+        raise tr.AppError("That playlist is no longer in local history.", 404)
 
     ensure_playlist_read_scope(tr.spotify)
     token = tr.spotify.get_access_token()
