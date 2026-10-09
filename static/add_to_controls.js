@@ -43,28 +43,79 @@
     });
   }
 
+  function reportFailure(details) {
+    const status = document.querySelector('#status');
+    const summary = 'ADD TO FAILED / ' + details.message;
+    if (status) status.textContent = summary;
+    let panel = document.querySelector('#add-to-error-details');
+    if (!panel) {
+      panel = document.createElement('details');
+      panel.id = 'add-to-error-details';
+      panel.style.cssText = 'margin:12px 0;padding:12px;border:1px solid var(--line-strong);white-space:pre-wrap;overflow-wrap:anywhere';
+      const summaryNode = document.createElement('summary');
+      summaryNode.textContent = 'View error diagnostics';
+      const pre = document.createElement('pre');
+      pre.style.cssText = 'white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px';
+      panel.append(summaryNode, pre);
+      (status?.parentNode || document.body).appendChild(panel);
+    }
+    panel.querySelector('pre').textContent = JSON.stringify(details, null, 2);
+    panel.hidden = false;
+    panel.open = true;
+    console.error('[Tune Raider] Add to failed', details);
+  }
+
   async function addMore(button) {
     const id = button.dataset.id;
     if (!id || button.disabled) return;
     const original = button.textContent;
+    const startedAt = Date.now();
+    const endpoint = `/api/history/${encodeURIComponent(id)}/add`;
+    document.querySelector('#add-to-error-details')?.remove();
     const status = document.querySelector('#status');
     button.disabled = true;
     button.textContent = 'Adding…';
     if (status) status.textContent = 'SYNCING SPOTIFY / DISCOVERING / ADDING...';
+    let response;
+    let responseBody = '';
+    let data = {};
     try {
-      const response = await fetch(`/api/history/${encodeURIComponent(id)}/add`, {
+      response = await fetch(endpoint, {
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:'{}',
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || 'Could not add tracks.');
+      responseBody = await response.text();
+      try { data = JSON.parse(responseBody); } catch (_) {}
+      if (!response.ok) {
+        const reason = response.status === 524
+          ? 'Cloudflare timed out waiting for Tune Raider. The server may still be processing; check Spotify and history before retrying.'
+          : (data.error || 'Could not add tracks.');
+        throw new Error(reason);
+      }
       if (data.notice) window.alert(data.notice);
       window.location.reload();
     } catch (error) {
       button.disabled = false;
       button.textContent = original;
-      if (status) status.textContent = `ERROR / ${error.message || error}`;
+      reportFailure({
+        operation: 'Add to playlist',
+        historyId: id,
+        endpoint,
+        timestamp: new Date().toISOString(),
+        elapsedSeconds: Math.round((Date.now() - startedAt) / 1000),
+        httpStatus: response?.status ?? null,
+        httpStatusText: response?.statusText || null,
+        errorType: error?.name || 'Error',
+        message: String(error?.message || error),
+        serverError: data.error || null,
+        serverStage: data.stage || null,
+        requestId: response?.headers?.get('cf-ray') || null,
+        responseExcerpt: responseBody.slice(0, 1200) || null,
+        guidance: response?.status === 524
+          ? 'Do not immediately retry. The backend may have finished writing to Spotify even though Cloudflare timed out.'
+          : 'Review the activity log and server logs for additional details.',
+      });
     }
   }
 
