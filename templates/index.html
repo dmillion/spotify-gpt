@@ -843,9 +843,21 @@
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
       const waiting = Number(data.waiting) || 0;
+      const addResponse = await fetch('/api/add-to-overview', {cache:'no-store'});
+      if (!addResponse.ok) throw new Error('Add to overview HTTP ' + addResponse.status);
+      const addData = await addResponse.json();
+      const activeAdd = addData.active;
       if (data.active) {
         const progress = Math.max(0, Math.min(100, Number(data.active.progress) || 0));
         machineStatusText.textContent = `MACHINE ACTIVE · ${stageLabel(data.active.stage).toUpperCase()} · ${progress}% · ${waiting} WAITING`;
+        machineStatusMeter.hidden = false;
+        machineStatusMeter.setAttribute('aria-valuenow', String(progress));
+        machineStatusFill.style.width = progress + '%';
+      } else if (activeAdd) {
+        const progress = Math.max(0, Math.min(100, Number(activeAdd.progress) || 0));
+        const elapsed = Math.max(0, Math.floor((Date.now() - Date.parse(activeAdd.created_at)) / 1000));
+        const elapsedLabel = Number.isFinite(elapsed) ? ' · ' + Math.floor(elapsed / 60) + ':' + String(elapsed % 60).padStart(2, '0') : '';
+        machineStatusText.textContent = 'MACHINE ACTIVE · ADD TO PLAYLIST #' + activeAdd.playlist_id + ' · ' + stageLabel(activeAdd.stage).toUpperCase() + ' · ' + progress + '%' + elapsedLabel;
         machineStatusMeter.hidden = false;
         machineStatusMeter.setAttribute('aria-valuenow', String(progress));
         machineStatusFill.style.width = progress + '%';
@@ -867,6 +879,7 @@
     }
   }
   machineStatusRefresh.addEventListener('click', () => loadMachineStatus({clearFinished:true}));
+  setInterval(() => { if (!document.hidden) loadMachineStatus(); }, 4000);
   const retryBuild = document.querySelector('#retry-build');
   let pendingGeneration = null;
   const activeGenerationKey = 'tune-raider-active-generation';
@@ -884,6 +897,9 @@
       spotify_create:'Spotify playlist creation',
       spotify_write:'writing tracks to Spotify',
       history_save:'saving Tune Raider history',
+      queued:'queued', spotify_sync:'reading Spotify playlist',
+      discovery:'discovering new tracks', resolution:'resolving Spotify tracks',
+      refill:'finding additional candidates', duplicate_check:'checking for duplicates',
       complete:'complete',
     })[stage] || stage || 'unknown stage';
   }
