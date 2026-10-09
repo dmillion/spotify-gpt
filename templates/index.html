@@ -836,7 +836,7 @@
   const machineStatusMeter = document.querySelector('.machine-status-meter');
   const machineStatusFill = document.querySelector('#machine-status-fill');
   const machineStatusRefresh = document.querySelector('#machine-status-refresh');
-  async function loadMachineStatus() {
+  async function loadMachineStatus({clearFinished=false}={}) {
     machineStatusRefresh.disabled = true;
     try {
       const response = await fetch('/api/generation-overview', {cache:'no-store'});
@@ -854,6 +854,10 @@
           ? `MACHINE READY · ${waiting} PLAYLIST${waiting === 1 ? '' : 'S'} WAITING`
           : 'MACHINE IDLE · NO ACTIVE PLAYLIST BUILDS';
         machineStatusMeter.hidden = true;
+        if (clearFinished && !waiting && window.TuneRaiderProgress?.clearFinishedProgress()) {
+          status.textContent = '';
+          document.querySelector('#add-to-error-details')?.remove();
+        }
       }
     } catch (error) {
       machineStatusText.textContent = `SERVER STATUS UNAVAILABLE · ${error.message}`;
@@ -862,7 +866,7 @@
       machineStatusRefresh.disabled = false;
     }
   }
-  machineStatusRefresh.addEventListener('click', loadMachineStatus);
+  machineStatusRefresh.addEventListener('click', () => loadMachineStatus({clearFinished:true}));
   const retryBuild = document.querySelector('#retry-build');
   let pendingGeneration = null;
   const activeGenerationKey = 'tune-raider-active-generation';
