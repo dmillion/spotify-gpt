@@ -836,7 +836,11 @@
   const machineStatusMeter = document.querySelector('.machine-status-meter');
   const machineStatusFill = document.querySelector('#machine-status-fill');
   const machineStatusRefresh = document.querySelector('#machine-status-refresh');
+  let machineStatusPoll = null;
+  let machineStatusLoading = false;
   async function loadMachineStatus({clearFinished=false}={}) {
+    if (machineStatusLoading) return;
+    machineStatusLoading = true;
     machineStatusRefresh.disabled = true;
     try {
       const response = await fetch('/api/generation-overview', {cache:'no-store'});
@@ -847,6 +851,10 @@
       if (!addResponse.ok) throw new Error('Add to overview HTTP ' + addResponse.status);
       const addData = await addResponse.json();
       const activeAdd = addData.active;
+      const hasWork = Boolean(data.active || activeAdd || waiting);
+      if (machineStatusPoll) clearTimeout(machineStatusPoll);
+      machineStatusPoll = null;
+      if (hasWork) machineStatusPoll = setTimeout(() => { if (!document.hidden) loadMachineStatus(); }, 4000);
       if (data.active) {
         const progress = Math.max(0, Math.min(100, Number(data.active.progress) || 0));
         machineStatusText.textContent = `MACHINE ACTIVE · ${stageLabel(data.active.stage).toUpperCase()} · ${progress}% · ${waiting} WAITING`;
@@ -876,10 +884,17 @@
       machineStatusMeter.hidden = true;
     } finally {
       machineStatusRefresh.disabled = false;
+      machineStatusLoading = false;
     }
   }
   machineStatusRefresh.addEventListener('click', () => loadMachineStatus({clearFinished:true}));
-  setInterval(() => { if (!document.hidden) loadMachineStatus(); }, 4000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && machineStatusPoll) {
+      clearTimeout(machineStatusPoll);
+      machineStatusPoll = null;
+      loadMachineStatus();
+    }
+  });
   const retryBuild = document.querySelector('#retry-build');
   let pendingGeneration = null;
   const activeGenerationKey = 'tune-raider-active-generation';
