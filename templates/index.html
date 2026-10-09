@@ -952,6 +952,7 @@
           return true;
         }
         if (state.status === 'failed') {
+          window.TuneRaiderProgress?.stopServerProgress(false, 'GENERATION FAILED');
           clearActiveGeneration(context.requestId);
           const where = stageLabel(state.stage);
           if (state.spotify_written) {
@@ -968,6 +969,7 @@
           return false;
         }
         if (state.status === 'missing') {
+          window.TuneRaiderProgress?.stopServerProgress(false, 'REQUEST NOT FOUND');
           status.textContent = 'The server no longer has this generation request. You can retry it safely.';
           clearActiveGeneration(context.requestId);
           showRetry(context, 'Retry playlist write');
