@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 
 import requests
 from flask import jsonify, request
@@ -16,10 +17,18 @@ from spotify_playlist_state import (
     compare_stored_to_live,
     ensure_playlist_read_scope,
     fetch_playlist_tracks,
+    normalized_key,
 )
 
 tr = run_app.tone_raider
 ADD_TO_COUNT = max(1, min(20, int(os.environ.get("DISCOVERY_ADD_TO_COUNT", "5"))))
+_add_locks_guard = threading.Lock()
+_add_locks: dict[int, threading.Lock] = {}
+
+
+def _playlist_lock(playlist_id: int) -> threading.Lock:
+    with _add_locks_guard:
+        return _add_locks.setdefault(playlist_id, threading.Lock())
 
 
 def _root_prompt(row) -> str:
@@ -73,6 +82,16 @@ def _resolve_new(token: str, requested: list[dict], live_uris: set[str], limit: 
 
 
 def add_to_playlist(playlist_id: int):
+    lock = _playlist_lock(playlist_id)
+    if not lock.acquire(blocking=False):
+        return jsonify({"error": "An Add to operation is already running for this playlist. Wait for it to finish before retrying.", "stage": "already_running"}), 409
+    try:
+        return _add_to_playlist_locked(playlist_id)
+    finally:
+        lock.release()
+
+
+def _add_to_playlist_locked(playlist_id: int):
     body = request.get_json(silent=True) or {}
     requested_count = body.get("count")
     count = ADD_TO_COUNT
@@ -119,6 +138,33 @@ def add_to_playlist(playlist_id: int):
         if not resolved:
             raise tr.AppError("No additional tracks could be resolved without repeating the current playlist.")
 
+        # Discovery can take longer than the proxy timeout. Re-read Spotify just
+        # before writing so a retry cannot append tracks written by the prior run.
+        _, latest_live = fetch_playlist_tracks(tr.spotify, token, row["spotify_url"])
+        existing_uris = {track.get("uri") for track in latest_live if track.get("uri")}
+        existing_keys = {normalized_key(tr.spotify, track) for track in latest_live}
+        unique = []
+        seen_uris = set(existing_uris)
+        seen_keys = set(existing_keys)
+        for track in resolved:
+            uri = track.get("uri")
+            record_key = normalized_key(tr.spotify, {
+                "artist": ", ".join(a.get("name", "") for a in track.get("artists", [])),
+                "title": track.get("name", ""),
+            })
+            if not uri or uri in seen_uris or record_key in seen_keys:
+                continue
+            seen_uris.add(uri)
+            seen_keys.add(record_key)
+            unique.append(track)
+        resolved = unique
+        if not resolved:
+            return jsonify({
+                "added": 0,
+                "tracks": [],
+                "playlist_id": row["id"],
+                "notice": "All discovered tracks are already in Spotify. No duplicates were added.",
+            })
         tr.spotify.add_items(token, spotify_playlist_id, [track["uri"] for track in resolved])
         added = [
             {
@@ -129,13 +175,13 @@ def add_to_playlist(playlist_id: int):
             }
             for track in resolved
         ]
-        updated = live + added
+        updated = latest_live + added
         stored_tracks = [
             {"artist": track.get("artist", ""), "title": track.get("title", ""), "url": track.get("url")}
             for track in updated
         ]
         source_tracks = [
-            {"artist": track.get("artist", ""), "title": track.get("title", ""), "source": "spotify-live" if index < len(live) else "spotify-add-to"}
+            {"artist": track.get("artist", ""), "title": track.get("title", ""), "source": "spotify-live" if index < len(latest_live) else "spotify-add-to"}
             for index, track in enumerate(updated)
         ]
         with tr.database() as connection:
@@ -159,7 +205,7 @@ def add_to_playlist(playlist_id: int):
             },
         )
         print(
-            f"[Tune Raider] add to: {len(live)} live + {len(added)} new; {len(manual_removed)} manual removals excluded",
+            f"[Tune Raider] add to: {len(latest_live)} live + {len(added)} new; {len(manual_removed)} manual removals excluded",
             flush=True,
         )
         return jsonify({
