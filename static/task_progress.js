@@ -214,16 +214,8 @@
         .task-progress-stage-main { gap:6px; }
         .task-progress-wave { width:104px; }
       }
-      @media (prefers-reduced-motion:reduce) {
-        .task-progress-wave > span,
-        .task-progress-bar::after { animation:none !important; }
-        .task-progress.is-active .task-progress-bar::after {
-          transform:none;
-          width:100%;
-          background:repeating-linear-gradient(90deg,transparent 0 8px,var(--acid) 8px 11px,transparent 11px 19px);
-          opacity:.35;
-        }
-      }
+      /* Keep task feedback animated even when the device requests reduced motion.
+         Tune Raider's long-running operations need an unmistakable busy state. */
     `;
     document.head.appendChild(style);
   }
