@@ -183,6 +183,15 @@ def add_to_status(job_id: str):
     return jsonify(_payload(row)) if row else (jsonify({"status": "missing"}), 404)
 
 
+def add_to_overview():
+    with tr.database() as db:
+        row = db.execute(
+            "SELECT * FROM playlist_add_jobs WHERE status IN ('running','queued') "
+            "ORDER BY created_at DESC LIMIT 1"
+        ).fetchone()
+    return jsonify({"active": _payload(row) if row else None})
+
+
 def latest_add_to_status(playlist_id: int):
     with tr.database() as db:
         row = db.execute("SELECT * FROM playlist_add_jobs WHERE playlist_id=? "
@@ -321,6 +330,7 @@ def _add_to_playlist_locked(playlist_id: int, count: int, stage_callback=None):
 
 
 _init_jobs()
+tr.app.add_url_rule("/api/add-to-overview", endpoint="add_to_overview", view_func=add_to_overview, methods=["GET"])
 tr.app.add_url_rule("/api/add-to-status/<job_id>", endpoint="add_to_status", view_func=add_to_status, methods=["GET"])
 tr.app.add_url_rule("/api/history/<int:playlist_id>/add-status", endpoint="latest_add_to_status", view_func=latest_add_to_status, methods=["GET"])
 tr.app.add_url_rule("/api/history/<int:playlist_id>/add", endpoint="add_to_playlist", view_func=add_to_playlist, methods=["POST"])
