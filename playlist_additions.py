@@ -251,7 +251,7 @@ def _add_to_playlist_locked(playlist_id: int, count: int, stage_callback=None):
         record_key = normalized_key(tr.spotify, {
             "artist": ", ".join(a.get("name", "") for a in track.get("artists", [])),
             "title": track.get("name", ""),
-        }
+        })
         if not uri or uri in seen_uris or record_key in seen_keys:
             continue
         seen_uris.add(uri)
