@@ -289,7 +289,18 @@
     }
   }
 
-  window.TuneRaiderProgress = {setServerProgress, stopServerProgress};
+  function clearFinishedProgress() {
+    if (activeRequest || serverProgressActive) return false;
+    ++activeToken; // Invalidate any delayed completion callback.
+    if (stageTimer) window.clearInterval(stageTimer);
+    if (elapsedTimer) window.clearInterval(elapsedTimer);
+    stageTimer = elapsedTimer = null;
+    const panel = document.querySelector('#task-progress');
+    if (panel) panel.className = 'task-progress';
+    return true;
+  }
+
+  window.TuneRaiderProgress = {setServerProgress, stopServerProgress, clearFinishedProgress};
 
   function formatElapsed(ms) {
     const seconds = Math.max(0, Math.floor(ms / 1000));
