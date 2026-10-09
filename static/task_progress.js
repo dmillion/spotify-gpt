@@ -257,7 +257,7 @@
   function setServerProgress(stage, progress, queuePosition=null) {
     const panel = ensurePanel();
     const value = Math.max(0, Math.min(100, Number(progress) || 0));
-    const labels = {queued:'QUEUED ON TUNE RAIDER',curation:'CURATING / DISCOVERING CANDIDATES',spotify_auth:'AUTHORIZING SPOTIFY',spotify_resolution:'RESOLVING TRACKS WITH SPOTIFY',spotify_create:'CREATING SPOTIFY PLAYLIST',spotify_write:'WRITING TRACKS TO SPOTIFY',history_save:'SAVING TUNE RAIDER HISTORY',complete:'COMPLETE'};
+    const labels = {queued:'QUEUED ON TUNE RAIDER',curation:'CURATING / DISCOVERING CANDIDATES',spotify_auth:'AUTHORIZING SPOTIFY',spotify_resolution:'RESOLVING TRACKS WITH SPOTIFY',spotify_create:'CREATING SPOTIFY PLAYLIST',spotify_write:'WRITING TRACKS TO SPOTIFY',history_save:'SAVING TUNE RAIDER HISTORY',spotify_sync:'READING CURRENT SPOTIFY PLAYLIST',discovery:'DISCOVERING NEW TRACKS',resolution:'RESOLVING TRACKS WITH SPOTIFY',refill:'SEARCHING FOR MORE TRACKS',duplicate_check:'CHECKING FOR DUPLICATES',complete:'COMPLETE'};
     panel.className = value >= 100 ? 'task-progress is-complete' : 'task-progress is-active';
     if (value < 100) {
       serverProgressActive = true;
@@ -413,7 +413,7 @@
     try {
       const response = await nativeFetch(...args);
       if (token) {
-        if (response.ok) finishTask(token, true, '', response.status === 202 && type === 'generate');
+        if (response.ok) finishTask(token, true, '', response.status === 202 && (type === 'generate' || type === 'add'));
         else {
           let detail = `HTTP ${response.status}`;
           try {
