@@ -55,6 +55,17 @@
   let stageTimer = null;
   let elapsedTimer = null;
   let startedAt = 0;
+  let serverProgressActive = false;
+
+  function runElapsedTimer(panel) {
+    if (!startedAt) startedAt = Date.now();
+    if (elapsedTimer) window.clearInterval(elapsedTimer);
+    const update = () => {
+      panel.querySelector('.task-progress-elapsed').textContent = formatElapsed(Date.now() - startedAt);
+    };
+    update();
+    elapsedTimer = window.setInterval(update, 1000);
+  }
 
   function classify(url, options = {}) {
     const method = String(options.method || 'GET').toUpperCase();
@@ -120,8 +131,38 @@
         color:var(--muted);
         font:500 11px 'DM Mono',monospace;
       }
-      .task-progress-bar { width:min(360px,100%); height:5px; overflow:hidden; border:1px solid color-mix(in srgb,var(--line-strong) 62%,transparent); background:color-mix(in srgb,var(--control) 72%,transparent); }
-      .task-progress-bar-fill { display:block; width:0%; height:100%; background:var(--acid); box-shadow:0 0 8px var(--crt-glow); transition:width .55s ease-out; }
+      .task-progress-bar {
+        position:relative;
+        width:min(360px,100%);
+        height:7px;
+        overflow:hidden;
+        border:1px solid color-mix(in srgb,var(--line-strong) 62%,transparent);
+        background:color-mix(in srgb,var(--control) 72%,transparent);
+      }
+      .task-progress-bar-fill {
+        display:block;
+        width:0%;
+        height:100%;
+        background:var(--acid);
+        box-shadow:0 0 8px var(--crt-glow);
+        transition:width .55s ease-out;
+      }
+      /* Moving scanner shows the worker is busy even when stage progress holds steady. */
+      .task-progress.is-active .task-progress-bar::after {
+        content:'';
+        position:absolute;
+        inset:0;
+        width:38%;
+        background:linear-gradient(90deg,transparent, var(--acid), transparent);
+        opacity:.75;
+        transform:translateX(-110%);
+        animation:task-progress-scan 1.65s linear infinite;
+        pointer-events:none;
+      }
+      @keyframes task-progress-scan {
+        from { transform:translateX(-110%); }
+        to { transform:translateX(280%); }
+      }
       .task-progress-percent { color:var(--muted); font:500 10px/1.3 'DM Mono',monospace; letter-spacing:.05em; }
       .task-progress-wave {
         display:flex;
@@ -129,15 +170,15 @@
         justify-content:center;
         gap:4px;
         width:104px;
-        height:16px;
+        height:20px;
         overflow:hidden;
         border:1px solid color-mix(in srgb,var(--line-strong) 62%,transparent);
         background:color-mix(in srgb,var(--control) 72%,transparent);
         opacity:.78;
       }
       .task-progress-wave > span {
-        width:3px;
-        height:4px;
+        width:4px;
+        height:5px;
         border-radius:999px;
         background:var(--acid);
         opacity:.28;
@@ -145,24 +186,24 @@
         transform-origin:center;
       }
       .is-active .task-progress-wave > span {
-        animation:task-wave 3.6s ease-in-out infinite;
+        animation:task-wave 1.25s ease-in-out infinite;
       }
-      .is-active .task-progress-wave > span:nth-child(2) { animation-delay:.18s; }
-      .is-active .task-progress-wave > span:nth-child(3) { animation-delay:.36s; }
-      .is-active .task-progress-wave > span:nth-child(4) { animation-delay:.54s; }
-      .is-active .task-progress-wave > span:nth-child(5) { animation-delay:.72s; }
-      .is-active .task-progress-wave > span:nth-child(6) { animation-delay:.90s; }
-      .is-active .task-progress-wave > span:nth-child(7) { animation-delay:1.08s; }
-      .is-active .task-progress-wave > span:nth-child(8) { animation-delay:1.26s; }
+      .is-active .task-progress-wave > span:nth-child(2) { animation-delay:.09s; }
+      .is-active .task-progress-wave > span:nth-child(3) { animation-delay:.18s; }
+      .is-active .task-progress-wave > span:nth-child(4) { animation-delay:.27s; }
+      .is-active .task-progress-wave > span:nth-child(5) { animation-delay:.36s; }
+      .is-active .task-progress-wave > span:nth-child(6) { animation-delay:.45s; }
+      .is-active .task-progress-wave > span:nth-child(7) { animation-delay:.54s; }
+      .is-active .task-progress-wave > span:nth-child(8) { animation-delay:.63s; }
       @keyframes task-wave {
         0%,100% {
-          height:4px;
-          opacity:.22;
-          transform:scaleY(.7);
+          height:5px;
+          opacity:.3;
+          transform:scaleY(.8);
         }
         50% {
-          height:11px;
-          opacity:.68;
+          height:16px;
+          opacity:1;
           transform:scaleY(1);
         }
       }
@@ -171,10 +212,17 @@
         .task-progress { margin-top:-6px; }
         .task-progress-stage { grid-template-columns:minmax(0,1fr) auto; gap:5px 12px; }
         .task-progress-stage-main { gap:6px; }
-        .task-progress-wave { width:88px; }
+        .task-progress-wave { width:104px; }
       }
       @media (prefers-reduced-motion:reduce) {
-        .task-progress-wave > span { animation:none !important; }
+        .task-progress-wave > span,
+        .task-progress-bar::after { animation:none !important; }
+        .task-progress.is-active .task-progress-bar::after {
+          transform:none;
+          width:100%;
+          background:repeating-linear-gradient(90deg,transparent 0 8px,var(--acid) 8px 11px,transparent 11px 19px);
+          opacity:.35;
+        }
       }
     `;
     document.head.appendChild(style);
@@ -219,6 +267,14 @@
     const value = Math.max(0, Math.min(100, Number(progress) || 0));
     const labels = {queued:'QUEUED ON TUNE RAIDER',curation:'CURATING / DISCOVERING CANDIDATES',spotify_auth:'AUTHORIZING SPOTIFY',spotify_resolution:'RESOLVING TRACKS WITH SPOTIFY',spotify_create:'CREATING SPOTIFY PLAYLIST',spotify_write:'WRITING TRACKS TO SPOTIFY',history_save:'SAVING TUNE RAIDER HISTORY',complete:'COMPLETE'};
     panel.className = value >= 100 ? 'task-progress is-complete' : 'task-progress is-active';
+    if (value < 100) {
+      serverProgressActive = true;
+      if (!elapsedTimer) runElapsedTimer(panel);
+    } else {
+      serverProgressActive = false;
+      if (elapsedTimer) window.clearInterval(elapsedTimer);
+      elapsedTimer = null;
+    }
     panel.querySelector('.task-progress-stage-name').textContent = labels[stage] || String(stage || 'SERVER WORKER ACTIVE').toUpperCase();
     panel.querySelector('.task-progress-bar-fill').style.width = value + '%';
     panel.querySelector('.task-progress-wave').style.opacity = stage === 'queued' ? '.25' : '.78';
@@ -227,7 +283,21 @@
       : value + '% · ' + (value >= 100 ? 'COMPLETE' : 'SERVER WORKER ACTIVE');
   }
 
-  window.TuneRaiderProgress = {setServerProgress};
+  function stopServerProgress(ok=false, message='') {
+    serverProgressActive = false;
+    if (elapsedTimer) window.clearInterval(elapsedTimer);
+    elapsedTimer = null;
+    const panel = document.querySelector('#task-progress');
+    if (!panel) return;
+    panel.className = `task-progress ${ok ? 'is-complete' : 'is-error'}`;
+    if (message) panel.querySelector('.task-progress-stage-name').textContent = message;
+    if (ok) {
+      panel.querySelector('.task-progress-bar-fill').style.width = '100%';
+      panel.querySelector('.task-progress-percent').textContent = '100% · COMPLETE';
+    }
+  }
+
+  window.TuneRaiderProgress = {setServerProgress, stopServerProgress};
 
   function formatElapsed(ms) {
     const seconds = Math.max(0, Math.floor(ms / 1000));
@@ -248,6 +318,7 @@
     if (stageTimer) window.clearInterval(stageTimer);
     if (elapsedTimer) window.clearInterval(elapsedTimer);
     startedAt = Date.now();
+    serverProgressActive = false;
     activeType = type;
     activeController = controller;
     activeRequest = true;
@@ -268,10 +339,7 @@
       stageIndex = Math.min(stageIndex + 1, task.stages.length - 1);
       setStage(panel, task, stageIndex);
     }, 5200);
-    elapsedTimer = window.setInterval(() => {
-      if (token !== activeToken) return;
-      panel.querySelector('.task-progress-elapsed').textContent = formatElapsed(Date.now() - startedAt);
-    }, 1000);
+    runElapsedTimer(panel);
     return token;
   }
 
@@ -284,6 +352,7 @@
     activeRequest = false;
     activeType = null;
     activeController = null;
+    serverProgressActive = serverQueued;
     panel.className = `task-progress ${serverQueued ? 'is-active' : (ok ? 'is-complete' : 'is-error')}`;
     panel.querySelector('.task-progress-stage-name').textContent = ok ? 'QUEUED ON SERVER' : (message || 'REQUEST FAILED');
     if (ok) {
@@ -291,6 +360,7 @@
       panel.querySelector('.task-progress-percent').textContent = '5% · SERVER WORKER ACTIVE';
     }
     panel.querySelector('.task-progress-elapsed').textContent = formatElapsed(Date.now() - startedAt);
+    if (serverQueued) runElapsedTimer(panel);
     if (ok && !serverQueued) window.setTimeout(() => {
       if (token === activeToken) panel.className = 'task-progress';
     }, 2200);
