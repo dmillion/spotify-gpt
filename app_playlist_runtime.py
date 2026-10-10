@@ -20,6 +20,9 @@ def install(ns: dict) -> None:
     generation_queue_limit = max(1, int(os.environ.get("GENERATION_QUEUE_LIMIT", "3")))
     generation_worker_started = False
 
+    class GenerationCancelled(Exception):
+        pass
+
     def _stage_error(stage: str, prefix: str, exc: Exception, *, spotify_created=False, spotify_written=False, spotify_url=None):
         message = str(exc).strip() or exc.__class__.__name__
         error = AppError(
@@ -153,6 +156,7 @@ def install(ns: dict) -> None:
         if not row:
             return {"status": "missing"}
         payload = {
+            "cancel_requested": bool(row["cancel_requested"]),
             "request_id": row["request_id"],
             "status": row["status"],
             "stage": row["stage"],
@@ -260,6 +264,10 @@ def install(ns: dict) -> None:
     }
 
     def _update_generation_stage(request_id: str, stage: str) -> None:
+        with ns["database"]() as db:
+            current = db.execute("SELECT cancel_requested FROM generation_requests WHERE request_id=?", (request_id,)).fetchone()
+        if current and current["cancel_requested"]:
+            raise GenerationCancelled("Playlist generation canceled before the next stage.")
         now = datetime.now(timezone.utc).isoformat()
         progress = GENERATION_PROGRESS.get(stage, 5)
         with ns["database"]() as connection:
@@ -279,11 +287,19 @@ def install(ns: dict) -> None:
             )
         print(f"[Tune Raider] starting queued generation {request_id[:12]}", flush=True)
         try:
+            with ns["database"]() as db:
+                current = db.execute("SELECT cancel_requested FROM generation_requests WHERE request_id=?", (request_id,)).fetchone()
+            if current and current["cancel_requested"]:
+                raise GenerationCancelled("Canceled while queued.")
             result = create_from_prompt(
                 prompt,
                 stage_callback=lambda stage: _update_generation_stage(request_id, stage),
             )
             _finish_generation_job(request_id, result)
+        except GenerationCancelled as exc:
+            with ns["database"]() as db:
+                db.execute("UPDATE generation_requests SET status='canceled',stage='canceled',error=?,updated_at=? WHERE request_id=?",
+                           (str(exc), datetime.now(timezone.utc).isoformat(), request_id))
         except Exception as exc:
             try:
                 _fail_generation_job(request_id, exc)
@@ -298,7 +314,10 @@ def install(ns: dict) -> None:
         while True:
             request_id, prompt = generation_queue.get()
             try:
-                _run_generation_job(request_id, prompt)
+                with ns["database"]() as db:
+                    state = db.execute("SELECT status FROM generation_requests WHERE request_id=?", (request_id,)).fetchone()
+                if state and state["status"] == "queued":
+                    _run_generation_job(request_id, prompt)
             except Exception as exc:
                 print(f"[Tune Raider] generation worker error for {request_id[:12]}: {exc}", flush=True)
             finally:
@@ -509,6 +528,25 @@ def install(ns: dict) -> None:
             "queue_limit": generation_queue_limit,
         })
 
+    @app.post("/api/generation-cancel/<request_id>")
+    def generation_cancel(request_id: str):
+        try:
+            request_id = _generation_request_id(request_id)
+        except AppError as exc:
+            return jsonify({"error": str(exc)}), exc.status_code
+        with ns["database"]() as db:
+            row = db.execute("SELECT * FROM generation_requests WHERE request_id=?", (request_id,)).fetchone()
+            if not row:
+                return jsonify({"error": "Generation job not found."}), 404
+            if row["status"] == "queued":
+                db.execute("UPDATE generation_requests SET status='canceled',stage='canceled',cancel_requested=1,"
+                           "error='Canceled before starting.',updated_at=? WHERE request_id=?",
+                           (datetime.now(timezone.utc).isoformat(), request_id))
+            elif row["status"] == "running":
+                db.execute("UPDATE generation_requests SET cancel_requested=1,updated_at=? WHERE request_id=?",
+                           (datetime.now(timezone.utc).isoformat(), request_id))
+        return jsonify(_generation_job_payload(_generation_job(request_id)))
+
     @app.post("/api/generate")
     def generate():
         body = request.get_json(silent=True) or {}
@@ -567,4 +605,4 @@ def install(ns: dict) -> None:
     ns.update({"create_from_prompt": create_from_prompt, "row_to_result": row_to_result, "home": home,
                "library_status": library_status, "history": history, "token_usage": token_usage,
                "generate": generate, "generation_status": generation_status,
-               "generation_overview": generation_overview, "regenerate": regenerate})
+               "generation_overview": generation_overview, "generation_cancel": generation_cancel, "regenerate": regenerate})
