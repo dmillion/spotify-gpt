@@ -1233,7 +1233,7 @@
     const hasAnchor = promptProfiles.some(profile => {
       const name = String(profile.name || '').toLowerCase();
       return name.length >= 3 && prompt.toLowerCase().includes(name);
-    }) || /\\b(?:sounds? like|similar to|inspired by|songs? by|tracks? by|artist:|band:|use .+ as a loose inspiration)\\s+\\S+/i.test(prompt);
+    }) || /\b(?:sounds? like|similar to|inspired by|songs? by|tracks? by|artist:|band:|use .+ as a loose inspiration)\s+\S+/i.test(prompt);
     if (hasAnchor) return submit('/api/generate', {prompt});
     anchorChoicePrompt = prompt;
     anchorInput.value = '';
