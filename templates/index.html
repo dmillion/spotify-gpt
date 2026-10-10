@@ -115,7 +115,11 @@
     const prompt = promptBox.value.trim();
     artistNudge.hidden = true;
     artistNudge.replaceChildren();
-    if (prompt.length < 12 || dismissedArtistPrompt === prompt) return;
+    if (prompt.length < 12 || dismissedArtistPrompt === prompt || button.disabled || pendingGeneration) return;
+    // Only surface guidance for genuinely underspecified requests. Specific genre,
+    // arrangement, instrument, tempo or production language is already actionable.
+    const clearMusicalIntent = /\\b(?:prog(?:ressive)?|rock|metal|punk|jazz|blues|funk|soul|hip.?hop|rap|folk|country|ambient|drone|doom|sludge|synth(?:wave|pop)?|wave|electronic|techno|house|disco|goth|industrial|shoegaze|post.?rock|math.?rock|guitar|bass|drum|vocal|harmon(?:y|ies|ized)|riff|groove|breakdown|acoustic|instrumental|piano|orchestral|psychedelic|upbeat|slow|fast|heavy|melodic|distorted|lo.?fi|dreamy|dark|gritty)\\b/i.test(prompt);
+    if (clearMusicalIntent) return;
     const normalized = prompt.toLocaleLowerCase();
     // Clear named artists in the user's listening profile are already sufficient anchors.
     const hasKnownAnchor = promptProfiles.some(profile => {
@@ -132,7 +136,7 @@
       return {name: profile.name, score};
     }).filter(item => item.score > 0).sort((a,b) => b.score-a.score).slice(0,3);
     const intro = document.createElement('span');
-    intro.textContent = ranked.length ? 'Optional artist inspiration:' : 'Have an artist in mind? Add one for direction, or explore freely.';
+    intro.textContent = ranked.length ? 'Optional starting points from your listening history:' : 'Want to add an artist for direction? Optional.';
     artistNudge.append(intro);
     if (ranked.length) {
       const suggestions = document.createElement('span');
@@ -1199,47 +1203,8 @@
     retryBuild.hidden = true;
     await submit(context.url, context.body, {requestId:context.requestId, retry:true});
   });
-  let anchorChoicePrompt = '';
-  const anchorChoice = document.createElement('div');
-  anchorChoice.className = 'artist-nudge-choice';
-  anchorChoice.hidden = true;
-  anchorChoice.style.cssText = 'margin:10px 0;padding:12px;border:1px solid var(--line-strong);font:12px/1.6 monospace';
-  anchorChoice.innerHTML = '<span>Any artist or song you want to use as a starting point? Optional — you can explore freely.</span> ';
-  const anchorInput = document.createElement('input');
-  anchorInput.placeholder = 'Artist or song (optional)';
-  anchorInput.setAttribute('aria-label', 'Optional inspiration artist or song');
-  anchorInput.style.cssText = 'max-width:260px;margin:6px;padding:7px';
-  const anchorUse = document.createElement('button');
-  anchorUse.type = 'button';
-  anchorUse.textContent = 'Use inspiration';
-  const anchorSkip = document.createElement('button');
-  anchorSkip.type = 'button';
-  anchorSkip.textContent = 'Explore freely';
-  anchorChoice.append(anchorInput, anchorUse, anchorSkip);
-  artistNudge.after(anchorChoice);
-  anchorUse.addEventListener('click', () => {
-    const inspiration = anchorInput.value.trim();
-    if (inspiration) promptBox.value = anchorChoicePrompt + ' — use ' + inspiration + ' as a loose inspiration, but explore beyond it';
-    anchorChoice.hidden = true;
-    submit('/api/generate', {prompt:promptBox.value});
-  });
-  anchorSkip.addEventListener('click', () => {
-    anchorChoice.hidden = true;
-    submit('/api/generate', {prompt:anchorChoicePrompt});
-  });
-  button.addEventListener('click', () => {
-    const prompt = promptBox.value.trim();
-    if (!prompt) return submit('/api/generate', {prompt});
-    const hasAnchor = promptProfiles.some(profile => {
-      const name = String(profile.name || '').toLowerCase();
-      return name.length >= 3 && prompt.toLowerCase().includes(name);
-    }) || /\b(?:sounds? like|similar to|inspired by|songs? by|tracks? by|artist:|band:|use .+ as a loose inspiration)\s+\S+/i.test(prompt);
-    if (hasAnchor) return submit('/api/generate', {prompt});
-    anchorChoicePrompt = prompt;
-    anchorInput.value = '';
-    anchorChoice.hidden = false;
-    anchorInput.focus();
-  });
+  // Generation never waits for a clarification or assumes an artist anchor.
+  button.addEventListener('click', () => submit('/api/generate', {prompt:promptBox.value}));
   promptBox.addEventListener('input', updateArtistNudge);
   promptBox.addEventListener('keydown', event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') button.click(); });
   history.addEventListener('click', event => { if (event.target.matches('.regen')) submit(`/api/history/${event.target.dataset.id}/regenerate`, {}); });
