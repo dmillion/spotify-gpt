@@ -78,6 +78,7 @@
   </section>
   <div class="status" id="status" role="status"></div>
   <button type="button" id="retry-build" class="retry-build" hidden>Check / retry playlist</button>
+  <button type="button" id="cancel-build" class="retry-build" hidden>Cancel generation</button>
   <p id="error-help" hidden><a id="error-help-link" target="_blank" rel="noopener noreferrer">Open OpenAI settings ↗</a></p>
   </div>
   <details class="usage">
@@ -959,6 +960,22 @@
     }
   });
   const retryBuild = document.querySelector('#retry-build');
+  const cancelBuild = document.querySelector('#cancel-build');
+  let currentGenerationId = null;
+  cancelBuild.addEventListener('click', async () => {
+    if (!currentGenerationId || cancelBuild.disabled) return;
+    cancelBuild.disabled = true;
+    cancelBuild.textContent = 'Cancel requested…';
+    try {
+      const response = await fetch('/api/generation-cancel/' + encodeURIComponent(currentGenerationId), {method:'POST'});
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      status.textContent = 'Cancellation requested. Waiting for a safe stopping point; a Spotify write already underway may finish.';
+    } catch (error) {
+      status.textContent = 'Could not request cancellation: ' + error.message;
+      cancelBuild.disabled = false;
+      cancelBuild.textContent = 'Cancel generation';
+    }
+  });
   let pendingGeneration = null;
   const activeGenerationKey = 'tune-raider-active-generation';
 
@@ -1012,6 +1029,8 @@
   async function finishSuccessfulBuild(data, recovered=false, requestId=null) {
     hideRetry();
     clearActiveGeneration(requestId);
+    cancelBuild.hidden = true;
+    currentGenerationId = null;
     const missing = data.missing?.length
       ? ` ${data.missing.length} unavailable on Spotify: ${data.missing.join('; ')}`
       : '';
@@ -1037,6 +1056,10 @@
 
   async function reconcileGeneration(context, attempts=180) {
     saveActiveGeneration(context);
+    currentGenerationId = context.requestId;
+    cancelBuild.hidden = false;
+    cancelBuild.disabled = false;
+    cancelBuild.textContent = 'Cancel generation';
     status.textContent = 'Playlist queued on your Tune Raider machine. The progress indicator below reports server-side work; you can leave this page.';
     window.TuneRaiderProgress?.setServerProgress('queued', 0);
     for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -1046,10 +1069,23 @@
         // The shared machine indicator is a snapshot; avoid background polling it.
 
         if (state.status === 'complete' && state.result) {
+          cancelBuild.hidden = true;
+          currentGenerationId = null;
           await finishSuccessfulBuild(state.result, true, context.requestId);
           return true;
         }
+        if (state.status === 'canceled') {
+          cancelBuild.hidden = true;
+          currentGenerationId = null;
+          clearActiveGeneration(context.requestId);
+          window.TuneRaiderProgress?.stopServerProgress(false, 'CANCELED');
+          status.textContent = 'Generation canceled.';
+          loadMachineStatus();
+          return false;
+        }
         if (state.status === 'failed') {
+          cancelBuild.hidden = true;
+          currentGenerationId = null;
           window.TuneRaiderProgress?.stopServerProgress(false, 'GENERATION FAILED');
           clearActiveGeneration(context.requestId);
           const where = stageLabel(state.stage);
@@ -1163,7 +1199,47 @@
     retryBuild.hidden = true;
     await submit(context.url, context.body, {requestId:context.requestId, retry:true});
   });
-  button.addEventListener('click', () => submit('/api/generate', {prompt:promptBox.value}));
+  let anchorChoicePrompt = '';
+  const anchorChoice = document.createElement('div');
+  anchorChoice.className = 'artist-nudge-choice';
+  anchorChoice.hidden = true;
+  anchorChoice.style.cssText = 'margin:10px 0;padding:12px;border:1px solid var(--line-strong);font:12px/1.6 monospace';
+  anchorChoice.innerHTML = '<span>Any artist or song you want to use as a starting point? Optional — you can explore freely.</span> ';
+  const anchorInput = document.createElement('input');
+  anchorInput.placeholder = 'Artist or song (optional)';
+  anchorInput.setAttribute('aria-label', 'Optional inspiration artist or song');
+  anchorInput.style.cssText = 'max-width:260px;margin:6px;padding:7px';
+  const anchorUse = document.createElement('button');
+  anchorUse.type = 'button';
+  anchorUse.textContent = 'Use inspiration';
+  const anchorSkip = document.createElement('button');
+  anchorSkip.type = 'button';
+  anchorSkip.textContent = 'Explore freely';
+  anchorChoice.append(anchorInput, anchorUse, anchorSkip);
+  artistNudge.after(anchorChoice);
+  anchorUse.addEventListener('click', () => {
+    const inspiration = anchorInput.value.trim();
+    if (inspiration) promptBox.value = anchorChoicePrompt + ' — use ' + inspiration + ' as a loose inspiration, but explore beyond it';
+    anchorChoice.hidden = true;
+    submit('/api/generate', {prompt:promptBox.value});
+  });
+  anchorSkip.addEventListener('click', () => {
+    anchorChoice.hidden = true;
+    submit('/api/generate', {prompt:anchorChoicePrompt});
+  });
+  button.addEventListener('click', () => {
+    const prompt = promptBox.value.trim();
+    if (!prompt) return submit('/api/generate', {prompt});
+    const hasAnchor = promptProfiles.some(profile => {
+      const name = String(profile.name || '').toLowerCase();
+      return name.length >= 3 && prompt.toLowerCase().includes(name);
+    }) || /\\b(?:sounds? like|similar to|inspired by|songs? by|tracks? by|artist:|band:|use .+ as a loose inspiration)\\s+\\S+/i.test(prompt);
+    if (hasAnchor) return submit('/api/generate', {prompt});
+    anchorChoicePrompt = prompt;
+    anchorInput.value = '';
+    anchorChoice.hidden = false;
+    anchorInput.focus();
+  });
   promptBox.addEventListener('input', updateArtistNudge);
   promptBox.addEventListener('keydown', event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') button.click(); });
   history.addEventListener('click', event => { if (event.target.matches('.regen')) submit(`/api/history/${event.target.dataset.id}/regenerate`, {}); });
