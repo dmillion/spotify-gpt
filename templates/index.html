@@ -18,7 +18,15 @@
     textarea { width:100%; min-height:164px; padding:22px; border:0; resize:vertical; background:transparent; color:var(--ink); font:500 20px/1.35 'Space Grotesk',sans-serif; outline:none; }
     textarea::placeholder { color:#9b9d94; } button { border:0; cursor:pointer; font:600 14px 'Space Grotesk',sans-serif; }
     .generate { background:var(--red); color:#fffdf8; border-left:2px solid var(--ink); font-size:16px; padding:20px; } .generate:hover { background:#c84e37; }
-    .artist-nudge { margin:10px 0 0; padding:12px; border:1px solid var(--ink); font-size:12px; line-height:1.5; } .artist-nudge[hidden] { display:none; } .artist-nudge button { margin:5px 6px 0 0; padding:6px 9px; border:1px solid var(--ink); background:transparent; color:inherit; cursor:pointer; font:inherit; } .artist-nudge button:hover { background:var(--acid); } .generate:disabled { cursor:wait; opacity:.6; } .status { min-height:24px; margin:22px 0 32px; color:var(--red); font:500 12px 'DM Mono',monospace; }
+    .artist-nudge { display:flex; align-items:center; flex-wrap:wrap; gap:5px 9px; margin:9px 0 0; color:var(--muted); font:500 11px/1.5 'DM Mono',monospace; }
+    .artist-nudge[hidden] { display:none; }
+    .artist-nudge .nudge-picks { display:inline-flex; flex-wrap:wrap; align-items:center; gap:5px; }
+    .artist-nudge .nudge-pick { border:1px solid var(--line); border-radius:16px; background:transparent; color:var(--ink); padding:3px 9px; font:500 11px 'DM Mono',monospace; }
+    .artist-nudge .nudge-pick:hover { border-color:var(--ink); background:var(--acid); }
+    .artist-nudge .nudge-dismiss { margin-left:auto; padding:2px 5px; background:transparent; color:var(--muted); font:500 11px 'DM Mono',monospace; text-decoration:underline; text-underline-offset:2px; }
+    .artist-nudge .nudge-dismiss:hover { color:var(--ink); }
+    @media (max-width:700px) { .artist-nudge { gap:5px 7px; } .artist-nudge .nudge-dismiss { margin-left:0; } }
+    .generate:disabled { cursor:wait; opacity:.6; } .status { min-height:24px; margin:22px 0 32px; color:var(--red); font:500 12px 'DM Mono',monospace; }
     .section-head { display:flex; align-items:baseline; justify-content:space-between; border-bottom:2px solid var(--ink); padding-bottom:10px; margin-bottom:18px; }
     h2 { margin:0; font-size:24px; } .history { display:grid; gap:14px; }
     .playlist { display:grid; grid-template-columns:1fr auto; gap:18px; border-bottom:1px solid var(--line); padding:20px 0; }
@@ -115,9 +123,6 @@
     });
     // An explicit artist/track construction is also a clear signal; don't interrupt it.
     if (hasKnownAnchor || /\\b(?:sounds? like|similar to|inspired by|songs? by|tracks? by|artist:|band:)\\s+\\S+/i.test(prompt)) return;
-    const intro = document.createElement('span');
-    intro.textContent = 'Have an artist in mind? You can use one as inspiration, or generate freely.';
-    artistNudge.append(intro);
     const words = normalized.match(/[a-z0-9]+/g) || [];
     const meaningful = words.filter(word => word.length >= 4 && !['with','that','some','music','songs','like','more','very','from','into','make','want'].includes(word));
     const ranked = promptProfiles.map(profile => {
@@ -125,16 +130,21 @@
       const score = meaningful.filter(word => tags.includes(word)).length;
       return {name: profile.name, score};
     }).filter(item => item.score > 0).sort((a,b) => b.score-a.score).slice(0,3);
+    const intro = document.createElement('span');
+    intro.textContent = ranked.length ? 'Optional artist inspiration:' : 'Have an artist in mind? Add one for direction, or explore freely.';
+    artistNudge.append(intro);
     if (ranked.length) {
-      const suggestions = document.createElement('div');
-      suggestions.textContent = 'From your listening history: ';
+      const suggestions = document.createElement('span');
+      suggestions.className = 'nudge-picks';
       ranked.forEach(item => {
         const pick = document.createElement('button');
+        pick.className = 'nudge-pick';
         pick.type = 'button';
-        pick.textContent = item.name;
+        pick.textContent = '+ ' + item.name;
+        pick.title = 'Add as a loose influence, not a restriction';
         pick.addEventListener('click', () => {
           promptBox.value = prompt + ' — use ' + item.name + ' as a loose influence, but explore beyond that artist';
-          dismissedArtistPrompt = '';
+          dismissedArtistPrompt = promptBox.value.trim();
           updateArtistNudge();
           promptBox.focus();
         });
@@ -143,8 +153,9 @@
       artistNudge.append(suggestions);
     }
     const dismiss = document.createElement('button');
+    dismiss.className = 'nudge-dismiss';
     dismiss.type = 'button';
-    dismiss.textContent = 'Explore freely';
+    dismiss.textContent = 'Dismiss';
     dismiss.addEventListener('click', () => { dismissedArtistPrompt = prompt; artistNudge.hidden = true; });
     artistNudge.append(dismiss);
     artistNudge.hidden = false;
