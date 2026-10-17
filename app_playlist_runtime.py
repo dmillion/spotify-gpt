@@ -1,6 +1,8 @@
 """Playlist creation/history routes installed into app.py."""
 from __future__ import annotations
 
+from vocal_policy import enforce_resolved
+
 import json
 import os
 import queue
@@ -70,6 +72,11 @@ def install(ns: dict) -> None:
         except Exception as exc:
             _stage_error("spotify_resolution", "Spotify track resolution failed", exc)
 
+        try:
+            resolved, constraint_rejections = enforce_resolved(prompt, resolved)
+        except ValueError as exc:
+            _stage_error("spotify_resolution", "Instrumental constraint could not be satisfied", exc)
+
         if not resolved:
             error = AppError("Spotify could not resolve any tracks from the generated playlist.")
             error.stage = "spotify_resolution"
@@ -117,6 +124,7 @@ def install(ns: dict) -> None:
             "tracks": tracks,
             "spotify_url": spotify_url,
             "missing": missing,
+            "constraint_rejections": list(generated.get("constraint_rejections") or []) + constraint_rejections,
             "source": "hybrid",
             "source_tracks": generated["tracks"],
             "created_at": datetime.now(timezone.utc).isoformat(),

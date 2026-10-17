@@ -540,17 +540,6 @@
     clearButton.textContent = '×';
     composer.appendChild(clearButton);
 
-    if (status) {
-      const decorateStatus = () => {
-        const text = status.textContent.trim();
-        if (text.startsWith('CURATING /') && !status.querySelector('svg')) {
-          status.innerHTML = `${loadingIcon()} <span>${text}</span>`;
-        }
-      };
-      new MutationObserver(decorateStatus).observe(status, {childList: true, characterData: true, subtree: true});
-      decorateStatus();
-      installNetworkTerminal(status);
-    }
 
     if (history) {
       history.addEventListener('click', event => {

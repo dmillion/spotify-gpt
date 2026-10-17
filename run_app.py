@@ -11,6 +11,7 @@ from flask import jsonify, request
 
 import app as tone_raider
 from anchor_policy import ensure_prompt_anchor
+from vocal_policy import filter_tracks, requires_instrumental, enforce_resolved
 from intent_policy import apply_request_constraints, has_title_constraint, title_constraint
 from spotify_discovery import search_broad_context
 
@@ -210,6 +211,12 @@ def ask_for_hybrid_playlist_with_safeguards(prompt: str, excluded_tracks=None) -
             artist_limit=tone_raider.PLAYLIST_ARTIST_LIMIT,
         )
         generated = _broaden_sparse_general_result(prompt, generated, excluded_tracks)
+    generated["tracks"], rejected = filter_tracks(prompt, generated["tracks"])
+    generated["constraint_rejections"] = rejected
+    if requires_instrumental(prompt):
+        if not generated["tracks"]:
+            raise tone_raider.AppError("Instrumental-only request: no selected tracks had supporting instrumental metadata. Unknown and vocal tracks were excluded; no playlist was created.")
+        generated["description"] = str(generated.get("description") or "") + " Instrumental-only selection based on track metadata; unverified tracks excluded."
     return generated
 
 
@@ -253,6 +260,7 @@ def _save_refined_playlist(
         elif not track:
             missing.append(f"{track_request.artist} - {track_request.title}")
 
+    resolved, _ = enforce_resolved(str(source_row["prompt"]) + "\n" + instruction, resolved)
     if not resolved:
         raise tone_raider.AppError("Spotify could not resolve any tracks for the refined playlist.")
 

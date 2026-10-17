@@ -1,6 +1,8 @@
 """Append fresh discoveries to a playlist that is already working."""
 from __future__ import annotations
 
+from vocal_policy import enforce_resolved
+
 import json
 import os
 import threading
@@ -243,6 +245,7 @@ def _add_to_playlist_locked(playlist_id: int, count: int, stage_callback=None):
         resolved.extend(more)
         missing.extend(more_missing)
 
+    resolved, _ = enforce_resolved(prompt, resolved)
     if not resolved:
         raise tr.AppError("No additional tracks could be resolved without repeating the current playlist.")
 

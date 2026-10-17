@@ -1255,3 +1255,15 @@ html[data-crt='on'] .signal-primary {
   80% { opacity:.962; }
   81% { opacity:1; }
 }
+
+/* Expanded usage readout; every cell can wrap instead of clipping. */
+.usage[open] { width:min(760px,100%); }
+.usage-body { width:100%; min-width:0; }
+.usage-grid { gap:20px; }
+.usage-grid > div { min-width:0; }
+.usage-grid .meta, .usage-note, .usage-explainer { overflow-wrap:anywhere; white-space:normal; }
+.usage-value, #usage-total { font-size:clamp(20px,2.3vw,30px); letter-spacing:-.025em; overflow-wrap:anywhere; }
+.usage-explainer { border-top:1px solid var(--line); margin-top:16px; padding-top:8px; color:var(--muted); font:12px/1.6 'DM Mono',monospace; }
+.usage-explainer p { margin:8px 0; }
+.usage-explainer [data-usage-explanation='mode'] { color:var(--acid); }
+@media (max-width:900px) { .usage-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }

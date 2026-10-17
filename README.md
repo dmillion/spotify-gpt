@@ -252,18 +252,38 @@ playlist history for inspection via `/api/history`.
 
 Run the isolated checks with `.venv/bin/python -m unittest discover -s tests -v`.
 
-### OpenAI token meter
+### AI usage meter
 
-The dashboard shows input/output tokens, total recorded tokens, and today's tokens
-(UTC), using the usage counts returned by OpenAI. Each API response is recorded in
-`openai_usage` in the playlist history database, including both library-mode calls
-and responses whose content or subsequent Spotify operation fails. The meter
-refreshes every 10 seconds and after generation or regeneration.
+The expanded AI usage panel shows recorded Ollama input/output tokens, total tokens,
+and today's tokens (UTC). Input includes instructions and candidate context; output
+is the model response. The bar shows the input/output split, not remaining quota.
+Hover over a compact number to see the full count. Counts update when responses
+arrive and persist in the `model_usage` table in the playlist history database.
 
-Tracking begins with this feature; older calls and usage from other apps are not
-included. Requests without a usage response (for example, a network timeout) cannot
-be counted. Responses missing token counts are flagged as unreported. Totals persist
-across restarts and the usage endpoint uses the dashboard's existing login protection.
+Runtime information distinguishes local inference from Ollama Cloud. Local inference
+has no provider token bill or monthly quota; token volume affects compute time and
+memory requirements. The per-request context window still applies. Cumulative totals
+may include previous Ollama configurations and cannot measure current context use or
+remaining cloud allowance. Missing usage responses cannot be counted.
+
+The main progress bar combines stage completion with animated vertical graph lines;
+the graph indicates activity while the stage percentage is unchanged. It stops on
+completion or failure. The separate waveform loader and duplicate status animation
+have been removed.
+
+### Instrumental-only requests
+
+Explicit constraints such as “instrumental only” and “no vocals” trigger a strict
+track-level filter after curation and again on the actual Spotify matches. The
+same check applies before refinement, regeneration, and addition writes. Artist
+similarity and model claims alone are not evidence. Supporting metadata comes
+from track tags, recording/work credits, or an explicit instrumental version label.
+Vocal and unverified tracks are excluded instead of filling the requested count.
+If none qualify, no playlist is written. The completion message reports exclusions.
+
+This is metadata filtering, not audio analysis: incorrect metadata can still cause
+mistakes. Incomplete metadata or unavailable services can produce a shorter result
+or prevent generation. Existing playlists are not changed automatically.
 
 ### Dashboard themes
 

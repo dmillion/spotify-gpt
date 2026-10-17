@@ -134,7 +134,7 @@
       .task-progress-bar {
         position:relative;
         width:min(360px,100%);
-        height:7px;
+        height:16px;
         overflow:hidden;
         border:1px solid color-mix(in srgb,var(--line-strong) 62%,transparent);
         background:color-mix(in srgb,var(--control) 72%,transparent);
@@ -143,79 +143,38 @@
         display:block;
         width:0%;
         height:100%;
-        background:var(--acid);
-        box-shadow:0 0 8px var(--crt-glow);
+        background:color-mix(in srgb,var(--acid) 42%,transparent);
+        border-right:1px solid var(--acid);
         transition:width .55s ease-out;
       }
-      /* Moving scanner shows the worker is busy even when stage progress holds steady. */
-      .task-progress.is-active .task-progress-bar::after {
-        content:'';
-        position:absolute;
-        inset:0;
-        width:38%;
-        background:linear-gradient(90deg,transparent, var(--acid), transparent);
-        opacity:.75;
-        transform:translateX(-110%);
-        animation:task-progress-scan 1.65s linear infinite;
-        pointer-events:none;
+      /* One indicator: stage fill with a low-contrast animated graph overlay. */
+      .task-progress-graph {
+        position:absolute; inset:1px 0; display:flex; align-items:center;
+        justify-content:space-around; gap:3px; padding:0 3px; pointer-events:none;
       }
-      @keyframes task-progress-scan {
-        from { transform:translateX(-110%); }
-        to { transform:translateX(280%); }
+      .task-progress-graph > span {
+        flex:1; max-width:3px; height:100%; background:var(--acid);
+        opacity:.18; transform:scaleY(.25); transform-origin:center;
       }
+      .is-active .task-progress-graph > span {
+        animation:task-graph 1.8s ease-in-out infinite;
+        animation-delay:calc(var(--i) * -85ms);
+      }
+      @keyframes task-graph {
+        0%,100% { transform:scaleY(.2); opacity:.18; }
+        50% { transform:scaleY(.95); opacity:.65; }
+      }
+      .task-progress.is-complete .task-progress-graph,
+      .task-progress.is-error .task-progress-graph { display:none; }
       .task-progress-percent { color:var(--muted); font:500 10px/1.3 'DM Mono',monospace; letter-spacing:.05em; }
-      .task-progress-wave {
-        display:flex;
-        align-items:center;
-        justify-content:center;
-        gap:4px;
-        width:104px;
-        height:20px;
-        overflow:hidden;
-        border:1px solid color-mix(in srgb,var(--line-strong) 62%,transparent);
-        background:color-mix(in srgb,var(--control) 72%,transparent);
-        opacity:.78;
-      }
-      .task-progress-wave > span {
-        width:4px;
-        height:5px;
-        border-radius:999px;
-        background:var(--acid);
-        opacity:.28;
-        transform:scaleY(.7);
-        transform-origin:center;
-      }
-      .is-active .task-progress-wave > span {
-        animation:task-wave 1.25s ease-in-out infinite;
-      }
-      .is-active .task-progress-wave > span:nth-child(2) { animation-delay:.09s; }
-      .is-active .task-progress-wave > span:nth-child(3) { animation-delay:.18s; }
-      .is-active .task-progress-wave > span:nth-child(4) { animation-delay:.27s; }
-      .is-active .task-progress-wave > span:nth-child(5) { animation-delay:.36s; }
-      .is-active .task-progress-wave > span:nth-child(6) { animation-delay:.45s; }
-      .is-active .task-progress-wave > span:nth-child(7) { animation-delay:.54s; }
-      .is-active .task-progress-wave > span:nth-child(8) { animation-delay:.63s; }
-      @keyframes task-wave {
-        0%,100% {
-          height:5px;
-          opacity:.3;
-          transform:scaleY(.8);
-        }
-        50% {
-          height:16px;
-          opacity:1;
-          transform:scaleY(1);
-        }
-      }
       .task-progress.is-error .task-progress-stage-name { color:var(--red); }
       @media (max-width:700px) {
         .task-progress { margin-top:-6px; }
         .task-progress-stage { grid-template-columns:minmax(0,1fr) auto; gap:5px 12px; }
         .task-progress-stage-main { gap:6px; }
-        .task-progress-wave { width:104px; }
+
       }
-      /* Keep task feedback animated even when the device requests reduced motion.
-         Tune Raider's long-running operations need an unmistakable busy state. */
+
     `;
     document.head.appendChild(style);
   }
@@ -233,12 +192,9 @@
       <div class="task-progress-stage">
         <div class="task-progress-stage-main">
           <div class="task-progress-stage-name"></div>
-          <div class="task-progress-bar" aria-hidden="true"><span class="task-progress-bar-fill"></span></div>
+          <div class="task-progress-bar" aria-hidden="true"><span class="task-progress-bar-fill"></span><span class="task-progress-graph">${Array.from({length:48}, (_, i) => `<span style="--i:${i}"></span>`).join('')}</span></div>
           <div class="task-progress-percent">0% · SERVER WORKER ACTIVE</div>
-          <div class="task-progress-wave" aria-hidden="true">
-            <span></span><span></span><span></span><span></span>
-            <span></span><span></span><span></span><span></span>
-          </div>
+
         </div>
         <div class="task-progress-elapsed">0:00</div>
       </div>
@@ -269,7 +225,7 @@
     }
     panel.querySelector('.task-progress-stage-name').textContent = labels[stage] || String(stage || 'SERVER WORKER ACTIVE').toUpperCase();
     panel.querySelector('.task-progress-bar-fill').style.width = value + '%';
-    panel.querySelector('.task-progress-wave').style.opacity = stage === 'queued' ? '.25' : '.78';
+    panel.querySelector('.task-progress-graph').style.opacity = stage === 'queued' ? '.3' : '1';
     panel.querySelector('.task-progress-percent').textContent = stage === 'queued'
       ? (queuePosition ? 'QUEUE POSITION ' + queuePosition + ' · WAITING' : 'WAITING FOR SERVER WORKER')
       : value + '% · ' + (value >= 100 ? 'COMPLETE' : 'SERVER WORKER ACTIVE');

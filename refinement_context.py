@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 import requests
 from flask import jsonify, request
 
+from vocal_policy import enforce_resolved
+
 import run_app
 from preference_policy import artist_blocked, blocked_artists
 
@@ -81,6 +83,7 @@ def _save_refined_playlist(source_row, instruction: str, requested_tracks: list[
         elif not track:
             missing.append(f"{req.artist} - {req.title}")
 
+    resolved, _ = enforce_resolved(_root_prompt(source_row) + "\n" + instruction, resolved)
     if not resolved:
         raise tr.AppError("Spotify could not resolve any tracks for the refined playlist.")
 

@@ -45,6 +45,7 @@
     @media (max-width:700px) { .usage-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
   </style>
   <script src="{{ url_for('static', filename='themes.js') }}"></script>
+  <script src="{{ url_for('static', filename='usage_display.js') }}" data-tune-raider-usage="true"></script>
   <link rel="stylesheet" href="{{ url_for('static', filename='themes.css') }}">
 </head>
 <body>
@@ -882,22 +883,7 @@
     render(await response.json());
   }
   async function loadUsage() {
-    try {
-      const response = await fetch('/api/usage', {cache:'no-store'});
-      if (!response.ok) throw new Error('Could not refresh usage.');
-      const data = await response.json();
-      for (const [id, key] of Object.entries({total:'total_tokens', today:'today_tokens', input:'input_tokens', output:'output_tokens'})) {
-        document.querySelector(`#usage-${id}`).textContent = data[key].toLocaleString();
-      }
-      const total = data.input_tokens + data.output_tokens;
-      document.querySelector('#usage-input-bar').style.width = `${total ? data.input_tokens / total * 100 : 0}%`;
-      document.querySelector('#usage-output-bar').style.width = `${total ? data.output_tokens / total * 100 : 0}%`;
-      document.querySelector('#usage-detail').textContent = data.requests
-        ? `${data.requests.toLocaleString()} API responses recorded · Since ${dateLabel(data.first_recorded_at)} · Latest: ${data.latest.total_tokens === null ? 'usage unavailable' : data.latest.total_tokens.toLocaleString() + ' tokens'} (${data.latest.model})${data.unreported_requests ? ` · ${data.unreported_requests} responses without token counts` : ''}`
-        : 'Ready to measure your next playlist. Hybrid generation normally uses two API calls.';
-    } catch (error) {
-      document.querySelector('#usage-detail').textContent = 'Usage unavailable. Any displayed counts may be out of date; retrying automatically.';
-    }
+    await window.TuneRaiderUsage.refresh();
   }
   const machineStatus = document.querySelector('#machine-status');
   const machineStatusText = document.querySelector('#machine-status-text');
@@ -1038,7 +1024,7 @@
     const missing = data.missing?.length
       ? ` ${data.missing.length} unavailable on Spotify: ${data.missing.join('; ')}`
       : '';
-    status.textContent = `${recovered ? 'Connection recovered. ' : ''}Spotify write confirmed: built “${data.name}” with ${data.tracks.length} tracks.${missing}`;
+    status.textContent = `${recovered ? 'Connection recovered. ' : ''}Spotify write confirmed: built “${data.name}” with ${data.tracks.length} tracks.${missing}${data.constraint_rejections?.length ? ` ${data.constraint_rejections.length} vocal or unverified candidates excluded by the instrumental-only filter.` : ''}`;
     promptBox.value = '';
     rotatePromptPlaceholder();
 

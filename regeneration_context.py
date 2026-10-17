@@ -1,6 +1,8 @@
 """Fresh regeneration with Spotify-resolution backfill."""
 from __future__ import annotations
 
+from vocal_policy import enforce_resolved
+
 import json
 from datetime import datetime, timezone
 
@@ -90,6 +92,7 @@ def regenerate_contextual(playlist_id: int):
             resolved.extend(extra_resolved)
             missing.extend(extra_missing)
 
+        resolved, constraint_rejections = enforce_resolved(_fresh_prompt(row), resolved)
         resolved = resolved[:target_count]
         if not resolved:
             raise tr.AppError("Spotify could not resolve any tracks from the regenerated playlist.")
