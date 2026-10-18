@@ -135,7 +135,7 @@ Then start the app:
 source .venv/bin/activate
 git pull
 pip install -r requirements.txt
-python app.py
+./start_app.sh
 ```
 
 Open http://127.0.0.1:5000. The first generated playlist opens the existing Spotify PKCE authorization flow if a cached Spotify token is not available. Spotify playlists created by the app are private.
