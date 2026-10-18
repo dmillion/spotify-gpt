@@ -56,21 +56,17 @@ print(os.environ.get('PORT', '5000').strip() or '5000')
 PY
 )"
 
+# Never silently choose a fallback port: a browser or tunnel may still point to
+# the original one and display a different, outdated Tune Raider process.
 PORT_TO_USE="$REQUESTED_PORT"
-if lsof -nP -iTCP:"$PORT_TO_USE" -sTCP:LISTEN >/dev/null 2>&1; then
-  OWNER="$(lsof -nP -iTCP:"$PORT_TO_USE" -sTCP:LISTEN 2>/dev/null | awk 'NR==2 {print $1 " (PID " $2 ")"}' || true)"
-  echo "Port $PORT_TO_USE is already in use${OWNER:+ by $OWNER}."
-  for candidate in 5001 5002 5003 5050; do
-    if ! lsof -nP -iTCP:"$candidate" -sTCP:LISTEN >/dev/null 2>&1; then
-      PORT_TO_USE="$candidate"
-      echo "Using available fallback port $PORT_TO_USE for this run."
-      break
-    fi
-  done
+if ! [[ "$PORT_TO_USE" =~ ^[0-9]+$ ]] || (( PORT_TO_USE < 1 || PORT_TO_USE > 65535 )); then
+  echo "ERROR: Invalid PORT: $PORT_TO_USE"
+  exit 1
 fi
-
 if lsof -nP -iTCP:"$PORT_TO_USE" -sTCP:LISTEN >/dev/null 2>&1; then
-  echo "ERROR: Could not find an available Tune Raider port."
+  echo "ERROR: Port $PORT_TO_USE is still occupied after stopping Tune Raider processes."
+  lsof -nP -iTCP:"$PORT_TO_USE" -sTCP:LISTEN || true
+  echo "Refusing to start on a different port. Stop the reported process or change PORT explicitly."
   exit 1
 fi
 
