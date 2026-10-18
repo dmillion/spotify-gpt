@@ -12,6 +12,7 @@ import requests
 import lastfm_client as lastfm
 import musicbrainz_client as musicbrainz
 import instrumental_web_evidence
+import lrclib_client
 
 
 def normalize(value):
@@ -131,6 +132,24 @@ def filter_tracks(prompt: str, tracks: list[dict], *, resolved=False):
             evidence = track_evidence(artist, title)
         except (requests.RequestException, RuntimeError, ValueError, KeyError, TypeError):
             evidence = {'status':'unknown', 'source':'metadata lookup unavailable'}
+        # LRCLIB supplies a recording-specific instrumental flag. Re-check
+        # resolved Spotify identity using album and duration when available.
+        album = track.get('album') if resolved else track.get('album')
+        if isinstance(album, dict):
+            album = album.get('name')
+        duration = track.get('duration_ms')
+        if duration is not None:
+            duration = float(duration) / 1000.0
+        else:
+            duration = track.get('duration_seconds')
+        try:
+            lrclib = lrclib_client.evidence(artist, title, album, duration)
+        except (requests.RequestException, RuntimeError, ValueError, KeyError, TypeError):
+            lrclib = None
+        if lrclib and lrclib['status'] == 'vocal':
+            evidence = lrclib
+        elif lrclib and lrclib['status'] == 'instrumental' and evidence['status'] == 'unknown':
+            evidence = lrclib
         if evidence['status'] == 'instrumental':
             accepted.append({**track, 'instrumental_evidence':evidence})
         else:
