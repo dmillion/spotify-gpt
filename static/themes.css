@@ -1267,3 +1267,29 @@ html[data-crt='on'] .signal-primary {
 .usage-explainer p { margin:8px 0; }
 .usage-explainer [data-usage-explanation='mode'] { color:var(--acid); }
 @media (max-width:900px) { .usage-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+
+/* Cancellation control uses each theme's warning accent rather than the primary action color. */
+#cancel-build {
+  min-height:40px;
+  padding:9px 16px;
+  border:1px solid var(--warm-accent,var(--red));
+  border-radius:3px;
+  background:color-mix(in srgb,var(--warm-accent,var(--red)) 9%,var(--control));
+  color:var(--warm-accent,var(--red));
+  font:500 12px/1.4 'DM Mono',monospace;
+  letter-spacing:.04em;
+  cursor:pointer;
+  transition:background-color 150ms ease,color 150ms ease,border-color 150ms ease,box-shadow 150ms ease;
+}
+#cancel-build:hover:not(:disabled) {
+  background:var(--warm-accent,var(--red));
+  color:var(--button-ink);
+  box-shadow:0 0 12px color-mix(in srgb,var(--warm-accent,var(--red)) 20%,transparent);
+}
+#cancel-build:active:not(:disabled) {
+  box-shadow:inset 0 0 0 1px var(--button-ink);
+}
+#cancel-build:disabled {
+  opacity:.55;
+  cursor:default;
+}
