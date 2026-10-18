@@ -11,7 +11,7 @@ from flask import jsonify, request
 
 import app as tone_raider
 from anchor_policy import ensure_prompt_anchor
-from vocal_policy import filter_tracks, requires_instrumental, enforce_resolved
+from vocal_policy import requires_instrumental, enforce_resolved
 from intent_policy import apply_request_constraints, has_title_constraint, title_constraint
 from spotify_discovery import search_broad_context
 
@@ -211,12 +211,18 @@ def ask_for_hybrid_playlist_with_safeguards(prompt: str, excluded_tracks=None) -
             artist_limit=tone_raider.PLAYLIST_ARTIST_LIMIT,
         )
         generated = _broaden_sparse_general_result(prompt, generated, excluded_tracks)
-    generated["tracks"], rejected = filter_tracks(prompt, generated["tracks"])
-    generated["constraint_rejections"] = rejected
+    # Keep plausible candidates through curation. The strict instrumental check
+    # runs after Spotify resolution in app_playlist_runtime.create_from_prompt,
+    # when the recording's album and duration are available to LRCLIB.
+    # Filtering here loses that metadata and can reject every candidate before
+    # any recording-specific verification is possible.
     if requires_instrumental(prompt):
-        if not generated["tracks"]:
-            raise tone_raider.AppError("Instrumental-only request: no selected tracks had supporting instrumental metadata. Unknown and vocal tracks were excluded; no playlist was created.")
-        generated["description"] = str(generated.get("description") or "") + " Instrumental-only selection based on track metadata; unverified tracks excluded."
+        print(
+            f"[Tune Raider] instrumental-only curation: passing "
+            f"{len(generated.get('tracks') or [])} candidates to Spotify resolution "
+            "for mandatory track-level verification",
+            flush=True,
+        )
     return generated
 
 
