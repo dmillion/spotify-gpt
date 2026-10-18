@@ -101,6 +101,26 @@ def login():
 @app.post("/logout")
 def logout(): session.clear(); return redirect(url_for("login"))
 
+@app.get("/api/runtime-info")
+def runtime_info():
+    """Identify the live app instance when a tunnel or stale process is suspected."""
+    import subprocess
+    import sys
+    try:
+        revision = subprocess.run(
+            ["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=2, check=True,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        revision = "unknown"
+    return jsonify({
+        "revision": revision,
+        "application_path": str(ROOT),
+        "python": sys.version.split()[0],
+        "pid": os.getpid(),
+        "instrumental_pipeline": "post-resolution-lrclib-v1",
+    })
+
 import app_model_runtime as _model
 import app_retrieval_base as _retrieval
 import app_curator_runtime as _curator
