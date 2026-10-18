@@ -11,6 +11,7 @@ from functools import lru_cache
 import requests
 import lastfm_client as lastfm
 import musicbrainz_client as musicbrainz
+import instrumental_web_evidence
 
 
 def normalize(value):
@@ -106,7 +107,16 @@ def track_evidence(artist: str, title: str) -> dict:
     evidence = _lastfm_evidence(artist, title)
     if evidence and evidence['status'] == 'vocal':
         return evidence
-    return _musicbrainz_evidence(artist, title) or evidence or {'status':'unknown', 'source':'no track-level evidence'}
+    recording_evidence = _musicbrainz_evidence(artist, title)
+    if recording_evidence and recording_evidence['status'] == 'vocal':
+        return recording_evidence
+    if recording_evidence or evidence:
+        return recording_evidence or evidence
+    try:
+        online = instrumental_web_evidence.search_instrumental(artist, title)
+    except (requests.RequestException, RuntimeError, ValueError, KeyError, TypeError):
+        online = None
+    return online or {'status':'unknown', 'source':'no track-level evidence'}
 
 
 def filter_tracks(prompt: str, tracks: list[dict], *, resolved=False):
