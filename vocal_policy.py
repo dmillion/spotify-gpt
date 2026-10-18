@@ -152,6 +152,11 @@ def filter_tracks(prompt: str, tracks: list[dict], *, resolved=False):
             evidence = lrclib
         elif lrclib and lrclib['status'] == 'instrumental' and evidence['status'] == 'unknown':
             evidence = lrclib
+        print(
+            f"[Tune Raider] instrumental evidence: {artist} - {title}: "
+            f"{evidence['status']} via {evidence.get('source', 'unknown source')}",
+            flush=True,
+        )
         if evidence['status'] == 'instrumental':
             accepted.append({**track, 'instrumental_evidence':evidence})
         else:
