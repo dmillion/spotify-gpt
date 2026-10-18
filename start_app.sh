@@ -46,15 +46,10 @@ while read -r pid; do
   fi
 done < <(pgrep -f '(app|run_app|run_with_musicbrainz)\.py' || true)
 
-# Load the requested port from .env without sourcing arbitrary shell contents.
-REQUESTED_PORT="$($PYTHON - <<'PY'
-import os
-from pathlib import Path
-from dotenv import load_dotenv
-load_dotenv(dotenv_path=Path.cwd() / '.env')
-print(os.environ.get('PORT', '5000').strip() or '5000')
-PY
-)"
+# Keep the app on port 5001 (the tunnel/browser target). An explicit
+# PORT=... environment override is supported, but an old .env PORT=5000
+# must not send the launcher back to macOS Control Center's port.
+REQUESTED_PORT="${PORT:-5001}"
 
 # Never silently choose a fallback port: a browser or tunnel may still point to
 # the original one and display a different, outdated Tune Raider process.
@@ -86,7 +81,7 @@ model = os.environ.get("OLLAMA_MODEL", "gpt-oss:20b").strip()
 api_url = os.environ.get("OLLAMA_API_URL", "https://ollama.com/api/chat").strip()
 timeout = os.environ.get("OLLAMA_TIMEOUT", "300").strip()
 think = os.environ.get("OLLAMA_THINK", "false").strip() or "false"
-port = os.environ.get("PORT", "5000").strip()
+port = os.environ.get("PORT", "5001").strip()
 api_key = os.environ.get("OLLAMA_API_KEY", "").strip()
 musicbrainz = os.environ.get("MUSICBRAINZ_ENABLED", "true").strip().lower() not in {"0", "false", "no", "off"}
 
