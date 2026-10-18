@@ -138,7 +138,7 @@ pip install -r requirements.txt
 ./start_app.sh
 ```
 
-Open http://127.0.0.1:5000. The first generated playlist opens the existing Spotify PKCE authorization flow if a cached Spotify token is not available. Spotify playlists created by the app are private.
+Open http://127.0.0.1:5001. The first generated playlist opens the existing Spotify PKCE authorization flow if a cached Spotify token is not available. Spotify playlists created by the app are private.
 
 ## Sync an existing Spotify playlist
 
