@@ -29,7 +29,7 @@ def ollama_is_local() -> bool:
 
 
 @tone_raider.app.get("/api/runtime")
-def runtime_info():
+def ollama_runtime_info():
     """Expose non-secret runtime details needed for accurate UI terminology."""
     local = ollama_is_local()
     return jsonify({
