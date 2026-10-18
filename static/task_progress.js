@@ -158,7 +158,7 @@
       }
       .is-active .task-progress-graph > span {
         animation:task-graph 1.8s ease-in-out infinite;
-        animation-delay:calc(var(--i) * -85ms);
+        animation-delay:calc(var(--i) * 85ms - 1.8s);
       }
       @keyframes task-graph {
         0%,100% { transform:scaleY(.2); opacity:.18; }
