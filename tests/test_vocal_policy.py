@@ -7,6 +7,9 @@ import vocal_policy as policy
 class VocalPolicyTests(unittest.TestCase):
     def setUp(self):
         policy.track_evidence.cache_clear()
+        lrclib_mock = patch.object(policy.lrclib_client, 'evidence', return_value=None)
+        lrclib_mock.start()
+        self.addCleanup(lrclib_mock.stop)
 
     def test_strict_intent_and_negations(self):
         for prompt in ("Give me songs like 'Nineteen' by Karma to Burn, instrumental only", 'only instrumental stoner rock', 'no vocals', 'without singing', 'vocal-free music'):
