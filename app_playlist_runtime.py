@@ -8,6 +8,7 @@ import os
 import queue
 import re
 import threading
+import traceback
 from datetime import datetime, timezone
 import requests
 from flask import jsonify, render_template, request
@@ -48,6 +49,7 @@ def install(ns: dict) -> None:
         try:
             generated = ns["ask_for_hybrid_playlist"](prompt, excluded_tracks)
         except Exception as exc:
+            print("[Tune Raider] CURATION EXCEPTION TRACEBACK:\n" + traceback.format_exc(), flush=True)
             _stage_error("curation", "Playlist curation failed", exc)
 
         stage("spotify_auth")
