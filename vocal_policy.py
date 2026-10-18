@@ -142,10 +142,12 @@ def filter_tracks(prompt: str, tracks: list[dict], *, resolved=False):
             duration = float(duration) / 1000.0
         else:
             duration = track.get('duration_seconds')
-        try:
-            lrclib = lrclib_client.evidence(artist, title, album, duration)
-        except (requests.RequestException, RuntimeError, ValueError, KeyError, TypeError):
-            lrclib = None
+        lrclib = None
+        if evidence['status'] == 'unknown':
+            try:
+                lrclib = lrclib_client.evidence(artist, title, album, duration)
+            except (requests.RequestException, RuntimeError, ValueError, KeyError, TypeError):
+                lrclib = None
         if lrclib and lrclib['status'] == 'vocal':
             evidence = lrclib
         elif lrclib and lrclib['status'] == 'instrumental' and evidence['status'] == 'unknown':
