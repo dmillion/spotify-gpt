@@ -65,16 +65,23 @@ def evidence(artist, title, album=None, duration=None):
             return None
         candidates = rows
     matching = []
+    album_mismatches = 0
+    duration_mismatches = 0
     for row in candidates:
         if not isinstance(row, dict):
             continue
         if norm(row.get("artistName")) != norm(artist) or norm(row.get("trackName")) != norm(title):
             continue
+        # Different releases can have different album titles for the same recording.
+        # Allow this only when the exact artist/title AND duration agree.
         if album and norm(row.get("albumName")) != norm(album):
-            continue
+            album_mismatches += 1
+            if not duration_s:
+                continue
         if duration_s and duration_s > 0:
             try:
                 if abs(float(row.get("duration")) - duration_s) > 2:
+                    duration_mismatches += 1
                     continue
             except (TypeError, ValueError):
                 continue
@@ -82,6 +89,11 @@ def evidence(artist, title, album=None, duration=None):
             continue
         matching.append(row)
     if not matching:
+        print(
+            f"[Tune Raider] LRCLIB no matching recording: {artist} - {title} "
+            f"(album={album!r}, seconds={duration_s}, album_variants={album_mismatches}, "
+            f"duration_mismatches={duration_mismatches})", flush=True,
+        )
         return None
     statuses = {r["instrumental"] for r in matching}
     if len(statuses) > 1:
