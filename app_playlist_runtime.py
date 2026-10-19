@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from vocal_policy import enforce_resolved, filter_tracks, requires_instrumental
+import instrumental_discovery
 
 import json
 import os
@@ -67,7 +68,28 @@ def install(ns: dict) -> None:
         verified_tracks = []
         constraint_rejections = []
         try:
-            for attempt in range(2 if strict else 1):
+            if strict:
+                # Prefer targeted instrumental-scene discovery rather than first
+                # curating mostly vocal doom tracks and rejecting them afterward.
+                leads = instrumental_discovery.discover(
+                    token, spotify, prompt, seen_uris, limit=100,
+                )
+                for track in leads:
+                    uri = track.get("uri")
+                    if uri and uri not in seen_uris:
+                        resolved.append(track)
+                        seen_uris.add(uri)
+                first_verified, first_rejected = filter_tracks(
+                    prompt, leads, resolved=True,
+                )
+                verified_tracks.extend(first_verified)
+                constraint_rejections.extend(first_rejected)
+                print(
+                    f"[Tune Raider] instrumental-first verified "
+                    f"{len(first_verified)} of {len(leads)} Spotify leads",
+                    flush=True,
+                )
+            for attempt in range(2 if strict and len(verified_tracks) < ns["PLAYLIST_TRACK_LIMIT"] else 1):
                 if attempt:
                     exclusions = list(excluded_tracks or []) + [
                         f"{row['artist']} - {row['title']}" for row in all_candidates
