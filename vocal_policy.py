@@ -146,7 +146,8 @@ def filter_tracks(prompt: str, tracks: list[dict], *, resolved=False):
         if evidence['status'] == 'unknown':
             try:
                 lrclib = lrclib_client.evidence(artist, title, album, duration)
-            except (requests.RequestException, RuntimeError, ValueError, KeyError, TypeError):
+            except (requests.RequestException, RuntimeError, ValueError, KeyError, TypeError) as exc:
+                print(f"[Tune Raider] LRCLIB lookup failed: {artist} - {title}: {exc}", flush=True)
                 lrclib = None
         if lrclib and lrclib['status'] == 'vocal':
             evidence = lrclib
