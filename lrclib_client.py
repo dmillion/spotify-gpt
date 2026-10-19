@@ -29,12 +29,13 @@ def request(endpoint, params):
         time.sleep(pause)
     _last_request = time.monotonic()
     resp = requests.get(ROOT + endpoint, params=params, headers=HEADERS, timeout=8)
-    if resp.status_code == 429:
+    if resp.status_code in (429, 503):
         try:
             seconds = max(1.0, float(resp.headers.get("Retry-After", "60")))
         except (TypeError, ValueError):
             seconds = 60.0
         _rate_limited_until = time.monotonic() + seconds
+        print(f"[Tune Raider] LRCLIB HTTP {resp.status_code}; pausing requests for {seconds:.0f}s", flush=True)
         return None
     if resp.status_code == 404:
         return None
