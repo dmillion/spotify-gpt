@@ -1,7 +1,7 @@
 """Playlist creation/history routes installed into app.py."""
 from __future__ import annotations
 
-from vocal_policy import enforce_resolved
+from vocal_policy import enforce_resolved, filter_tracks, requires_instrumental
 
 import json
 import os
@@ -62,15 +62,43 @@ def install(ns: dict) -> None:
         resolved = []
         missing = []
         seen_uris = set()
+        all_candidates = list(generated["tracks"])
+        strict = requires_instrumental(prompt)
         try:
-            for requested in generated["tracks"]:
-                req = spotify.TrackRequest(requested["artist"], requested["title"])
-                track = spotify.search_track(token, req)
-                if track and track.get("uri") not in seen_uris:
-                    resolved.append(track)
-                    seen_uris.add(track["uri"])
-                elif not track:
-                    missing.append(f"{requested['artist']} - {requested['title']}")
+            for attempt in range(2 if strict else 1):
+                if attempt:
+                    exclusions = list(excluded_tracks or []) + [
+                        f"{row['artist']} - {row['title']}" for row in all_candidates
+                    ]
+                    recovery_prompt = (
+                        prompt + "\n\nFind a DIFFERENT set of exact instrumental recordings "
+                        "in the requested genres. Favor releases with documented track-level "
+                        "instrumental status. Do not repeat previous candidates."
+                    )
+                    try:
+                        extra = ns["ask_for_hybrid_playlist"](recovery_prompt, exclusions)
+                        candidates = list(extra.get("tracks") or [])
+                    except Exception as exc:
+                        print(f"[Tune Raider] instrumental recovery discovery failed: {exc}", flush=True)
+                        candidates = []
+                    all_candidates.extend(candidates)
+                    print(f"[Tune Raider] instrumental recovery: {len(candidates)} additional candidates", flush=True)
+                else:
+                    candidates = list(all_candidates)
+                for requested in candidates:
+                    req = spotify.TrackRequest(requested["artist"], requested["title"])
+                    track = spotify.search_track(token, req)
+                    if track and track.get("uri") not in seen_uris:
+                        resolved.append(track)
+                        seen_uris.add(track["uri"])
+                    elif not track:
+                        missing.append(f"{requested['artist']} - {requested['title']}")
+                if strict:
+                    verified, _ = filter_tracks(prompt, resolved, resolved=True)
+                    print(f"[Tune Raider] instrumental verification round {attempt+1}: "
+                          f"{len(verified)} verified of {len(resolved)} resolved", flush=True)
+                    if len(verified) >= ns["PLAYLIST_TRACK_LIMIT"]:
+                        break
         except Exception as exc:
             _stage_error("spotify_resolution", "Spotify track resolution failed", exc)
 
@@ -87,6 +115,8 @@ def install(ns: dict) -> None:
             error.spotify_url = None
             raise error
 
+        resolved = resolved[:ns["PLAYLIST_TRACK_LIMIT"]]
+        generated["tracks"] = all_candidates
         description = str(generated.get("description") or spotify.DEFAULT_DESCRIPTION).strip()
         name = str(generated.get("name") or "New Playlist").strip()
         playlist = None
