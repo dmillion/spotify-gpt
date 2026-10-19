@@ -51,19 +51,19 @@ def evidence(artist, title, album=None, duration=None):
     if not artist or not title:
         return None
     duration_s = float(duration) if duration is not None else None
-    candidates = None
+    candidates = []
     if album and duration_s and duration_s > 0:
         row = request("/get", {
             "artist_name": artist, "track_name": title,
             "album_name": album, "duration": round(duration_s),
         })
         if isinstance(row, dict):
-            candidates = [row]
-    if candidates is None:
-        rows = request("/search", {"artist_name": artist, "track_name": title})
-        if not isinstance(rows, list):
-            return None
-        candidates = rows
+            candidates.append(row)
+    # Search also catches matching recordings indexed against different
+    # releases and exposes conflicting instrumental statuses.
+    rows = request("/search", {"artist_name": artist, "track_name": title})
+    if isinstance(rows, list):
+        candidates.extend(rows)
     matching = []
     album_mismatches = 0
     duration_mismatches = 0
