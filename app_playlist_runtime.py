@@ -48,7 +48,14 @@ def install(ns: dict) -> None:
         ns["require_configuration"]()
         stage("curation")
         try:
-            generated = ns["ask_for_hybrid_playlist"](prompt, excluded_tracks)
+            if requires_instrumental(prompt):
+                generated = {
+                    "name": "Instrumental Discovery",
+                    "description": "Instrumental recordings selected with track-level evidence.",
+                    "tracks": [],
+                }
+            else:
+                generated = ns["ask_for_hybrid_playlist"](prompt, excluded_tracks)
         except Exception as exc:
             print("[Tune Raider] CURATION EXCEPTION TRACEBACK:\n" + traceback.format_exc(), flush=True)
             _stage_error("curation", "Playlist curation failed", exc)
@@ -90,6 +97,8 @@ def install(ns: dict) -> None:
                     flush=True,
                 )
             for attempt in range(2 if strict and len(verified_tracks) < ns["PLAYLIST_TRACK_LIMIT"] else 1):
+                if strict and len(verified_tracks) >= ns["PLAYLIST_TRACK_LIMIT"]:
+                    break
                 if attempt:
                     exclusions = list(excluded_tracks or []) + [
                         f"{row['artist']} - {row['title']}" for row in all_candidates
@@ -108,7 +117,22 @@ def install(ns: dict) -> None:
                     all_candidates.extend(candidates)
                     print(f"[Tune Raider] instrumental recovery: {len(candidates)} additional candidates", flush=True)
                 else:
-                    candidates = list(all_candidates)
+                    if strict:
+                        try:
+                            base = ns["ask_for_hybrid_playlist"](
+                                prompt,
+                                list(excluded_tracks or []) + [
+                                    str(t.get("artists", [{}])[0].get("name", "")) + " - " + str(t.get("name", ""))
+                                    for t in resolved
+                                ],
+                            )
+                            candidates = list(base.get("tracks") or [])
+                            all_candidates.extend(candidates)
+                        except Exception as exc:
+                            print(f"[Tune Raider] instrumental fallback curation failed: {exc}", flush=True)
+                            candidates = []
+                    else:
+                        candidates = list(all_candidates)
                 new_resolved = []
                 for requested in candidates:
                     req = spotify.TrackRequest(requested["artist"], requested["title"])
