@@ -29,6 +29,20 @@ class LRCLIBTests(unittest.TestCase):
         with patch.object(lrclib, "request", return_value=row):
             self.assertIsNone(lrclib.evidence("Band", "Song", "Record", 201))
 
+    def test_alternate_release_album_with_matching_duration(self):
+        row = {"id": 27, "artistName": "Band", "trackName": "Song",
+               "albumName": "Original Album", "duration": 201,
+               "instrumental": True, "plainLyrics": None, "syncedLyrics": None}
+        with patch.object(lrclib, "request", return_value=[row]):
+            result = lrclib.evidence("Band", "Song", "Deluxe Reissue", 201)
+        self.assertEqual(result["status"], "instrumental")
+
+    def test_alternate_album_without_duration_is_not_accepted(self):
+        row = {"id": 27, "artistName": "Band", "trackName": "Song",
+               "albumName": "Other Album", "duration": 201, "instrumental": True}
+        with patch.object(lrclib, "request", return_value=[row]):
+            self.assertIsNone(lrclib.evidence("Band", "Song", "Original Album"))
+
     def test_ambiguous_search_rejected(self):
         rows = [{"id": n, "artistName": "Band", "trackName": "Song",
                  "albumName": "Record", "duration": 201, "instrumental": flag}
