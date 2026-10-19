@@ -64,6 +64,8 @@ def install(ns: dict) -> None:
         seen_uris = set()
         all_candidates = list(generated["tracks"])
         strict = requires_instrumental(prompt)
+        verified_tracks = []
+        constraint_rejections = []
         try:
             for attempt in range(2 if strict else 1):
                 if attempt:
@@ -85,27 +87,42 @@ def install(ns: dict) -> None:
                     print(f"[Tune Raider] instrumental recovery: {len(candidates)} additional candidates", flush=True)
                 else:
                     candidates = list(all_candidates)
+                new_resolved = []
                 for requested in candidates:
                     req = spotify.TrackRequest(requested["artist"], requested["title"])
                     track = spotify.search_track(token, req)
                     if track and track.get("uri") not in seen_uris:
                         resolved.append(track)
+                        new_resolved.append(track)
                         seen_uris.add(track["uri"])
                     elif not track:
                         missing.append(f"{requested['artist']} - {requested['title']}")
                 if strict:
-                    verified, _ = filter_tracks(prompt, resolved, resolved=True)
+                    # Evaluate each Spotify recording once; previous rounds are
+                    # retained, not re-queried against unavailable metadata APIs.
+                    verified, rejected = filter_tracks(prompt, new_resolved, resolved=True)
+                    verified_tracks.extend(verified)
+                    constraint_rejections.extend(rejected)
                     print(f"[Tune Raider] instrumental verification round {attempt+1}: "
-                          f"{len(verified)} verified of {len(resolved)} resolved", flush=True)
-                    if len(verified) >= ns["PLAYLIST_TRACK_LIMIT"]:
+                          f"{len(verified_tracks)} verified of {len(resolved)} resolved", flush=True)
+                    if len(verified_tracks) >= ns["PLAYLIST_TRACK_LIMIT"]:
                         break
         except Exception as exc:
             _stage_error("spotify_resolution", "Spotify track resolution failed", exc)
 
-        try:
+        if strict:
+            resolved = verified_tracks
+            if not resolved:
+                _stage_error(
+                    "spotify_resolution", "Instrumental constraint could not be satisfied",
+                    ValueError(
+                        "No Spotify recordings had confirmed instrumental metadata. "
+                        "The candidate pool included vocal tracks and LRCLIB was unavailable "
+                        "for some lookups. No playlist was written."
+                    ),
+                )
+        else:
             resolved, constraint_rejections = enforce_resolved(prompt, resolved)
-        except ValueError as exc:
-            _stage_error("spotify_resolution", "Instrumental constraint could not be satisfied", exc)
 
         if not resolved:
             error = AppError("Spotify could not resolve any tracks from the generated playlist.")
