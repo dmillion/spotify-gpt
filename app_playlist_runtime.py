@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from vocal_policy import enforce_resolved, filter_tracks, requires_instrumental
 import instrumental_discovery
+import lyric_theme
 from playlist_prompt_metadata import spotify_description
 
 import json
@@ -183,6 +184,13 @@ def install(ns: dict) -> None:
                 )
         else:
             resolved, constraint_rejections = enforce_resolved(prompt, resolved)
+            if lyric_theme.intent(prompt):
+                stage("lyric_verification")
+                resolved, lyrical_rejections = lyric_theme.verify(prompt, resolved, ns["model_json"])
+                constraint_rejections.extend(lyrical_rejections)
+                if not resolved:
+                    _stage_error("lyric_verification", "Lyrical theme could not be verified",
+                                 ValueError("No selected tracks had lyrics confirming the requested theme. No playlist was written."))
 
         if not resolved:
             error = AppError("Spotify could not resolve any tracks from the generated playlist.")
@@ -455,6 +463,7 @@ def install(ns: dict) -> None:
         "instrumental_verification": 73,
         "instrumental_fallback": 79,
         "instrumental_naming": 83,
+        "lyric_verification": 80,
         "spotify_create": 86,
         "spotify_write": 92,
         "history_save": 97,
