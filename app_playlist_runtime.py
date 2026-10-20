@@ -644,11 +644,13 @@ def install(ns: dict) -> None:
 
     history_sync_lock = threading.Lock()
     history_sync_started = 0.0
+    history_sync_finished = 0
     history_sync_interval = max(30, int(os.environ.get("SPOTIFY_HISTORY_SYNC_INTERVAL", "60")))
 
     def _refresh_saved_spotify_tracks() -> None:
         """Refresh only known playlists. Never delete history on API failures."""
         import time
+        nonlocal history_sync_finished
         try:
             token_info = spotify.load_token()
             if not token_info or not spotify.token_has_required_scopes(token_info):
@@ -713,6 +715,7 @@ def install(ns: dict) -> None:
         except Exception as exc:
             print(f"[Tune Raider] Spotify history track refresh failed: {exc}", flush=True)
         finally:
+            history_sync_finished += 1
             history_sync_lock.release()
 
     def _schedule_saved_spotify_refresh() -> None:
@@ -741,6 +744,10 @@ def install(ns: dict) -> None:
             return jsonify({"available": True, "tracks": len(library.rows), "axes": list(library.summary()["axes"])})
         except Exception as exc:
             return jsonify({"available": False, "error": str(exc)})
+
+    @app.get("/api/history-sync-status")
+    def history_sync_status():
+        return jsonify({"running": history_sync_lock.locked(), "completed": history_sync_finished})
 
     @app.get("/api/history")
     def history():
