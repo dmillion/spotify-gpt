@@ -329,8 +329,9 @@ def get_access_token() -> str:
 def api_request(method: str, path: str, token: str, **kwargs) -> requests.Response:
     headers = dict(kwargs.pop("headers", {}))
     headers["Authorization"] = f"Bearer {token}"
+    refreshed_once = False
 
-    for attempt in range(3):
+    for attempt in range(4):
         response = requests.request(
             method,
             f"{API_BASE}{path}",
@@ -338,16 +339,33 @@ def api_request(method: str, path: str, token: str, **kwargs) -> requests.Respon
             timeout=30,
             **kwargs,
         )
-        if response.status_code != 429:
-            response.raise_for_status()
-            return response
-
-        retry_after = int(response.headers.get("Retry-After", "1"))
-        if attempt == 2:
+        if response.status_code == 401 and not refreshed_once:
+            cached = load_token()
+            if cached and cached.get("refresh_token"):
+                refreshed = refresh_access_token(cached)
+                if refreshed and refreshed.get("access_token"):
+                    headers["Authorization"] = f"Bearer {refreshed['access_token']}"
+                    refreshed_once = True
+                    continue
+        if response.status_code == 429:
+            retry_after = int(response.headers.get("Retry-After", "1"))
+            if attempt < 3:
+                time.sleep(min(retry_after, 30))
+                continue
+            raise SpotifyError(f"Spotify rate limit reached. Retry after {retry_after} seconds.")
+        if response.status_code >= 400:
+            # Spotify's JSON error message is the actionable diagnostic; never log tokens.
+            try:
+                detail = response.json().get("error", {})
+                if isinstance(detail, dict):
+                    detail = detail.get("message") or detail.get("reason") or detail.get("status")
+            except (ValueError, AttributeError):
+                detail = None
+            detail = str(detail or response.reason or "unknown error")[:300]
             raise SpotifyError(
-                f"Spotify rate limit reached. Retry after {retry_after} seconds."
+                f"Spotify API HTTP {response.status_code} on {method} {path}: {detail}"
             )
-        time.sleep(min(retry_after, 30))
+        return response
 
     raise SpotifyError("Unexpected Spotify API retry failure")
 
