@@ -570,33 +570,13 @@ def install(ns: dict) -> None:
         return ids
 
     def _trim_deleted_spotify_history() -> int:
-        current_ids = _current_spotify_playlist_ids()
-        if current_ids is None:
-            return 0
+        """Never delete local history during an ordinary page read.
 
-        with ns["database"]() as connection:
-            rows = connection.execute(
-                "SELECT id, spotify_url FROM generated_playlists WHERE spotify_url IS NOT NULL AND spotify_url != ''"
-            ).fetchall()
-            stale_ids = [
-                int(row["id"])
-                for row in rows
-                if _spotify_playlist_id(row["spotify_url"])
-                and _spotify_playlist_id(row["spotify_url"]) not in current_ids
-            ]
-            if stale_ids:
-                placeholders = ",".join("?" for _ in stale_ids)
-                connection.execute(
-                    f"DELETE FROM generated_playlists WHERE id IN ({placeholders})",
-                    stale_ids,
-                )
-
-        print(
-            f"[Tune Raider] history sync: checked {len(rows)} local build(s), "
-            f"found {len(current_ids)} Spotify playlist(s), removed {len(stale_ids)} stale build(s)",
-            flush=True,
-        )
-        return len(stale_ids)
+        A transient empty/partial Spotify response is not proof that playlists
+        were deleted. Destructive reconciliation must be explicitly requested,
+        and separately confirm the complete remote list.
+        """
+        return 0
 
     @app.get("/")
     def home():
@@ -612,7 +592,6 @@ def install(ns: dict) -> None:
 
     @app.get("/api/history")
     def history():
-        _trim_deleted_spotify_history()
         with ns["database"]() as connection:
             rows = connection.execute("SELECT * FROM generated_playlists ORDER BY id DESC LIMIT 30").fetchall()
         return jsonify([row_to_result(row) for row in rows])
