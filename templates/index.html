@@ -1199,7 +1199,24 @@
       ? `${data.tracks.toLocaleString()} tracks indexed · Hybrid library + discovery ready`
       : data.error;
   }).catch(() => { document.querySelector('#library-info').textContent = 'Could not check the MP3 index.'; });
-  loadHistory();
+  // Refresh rendered history after the background Spotify sync finishes.
+  async function refreshHistoryAfterSpotifySync() {
+    for (let attempt = 0; attempt < 45; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      try {
+        const response = await fetch('/api/history-sync-status', {cache:'no-store'});
+        if (!response.ok) return;
+        const state = await response.json();
+        if (!state.running) {
+          if (state.completed) await loadHistory();
+          return;
+        }
+      } catch (_) {
+        return;
+      }
+    }
+  }
+  loadHistory().then(refreshHistoryAfterSpotifySync).catch(() => {});
   loadUsage();
   loadMachineStatus();
   loadPromptIdeas();
