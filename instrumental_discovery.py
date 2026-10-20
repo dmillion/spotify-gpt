@@ -51,33 +51,45 @@ def discover(token, spotify, prompt, excluded_uris=(), *, limit=100):
     seen = set(excluded_uris)
     found = []
     queries = _search_queries(prompt)
+    pools = []
+    # Give every seed a chance before consuming the global limit.
+    # One page per seed avoids exhausting the budget on the first bands.
     for query in queries:
         wanted_artist = query[len('artist:"'):-1].casefold() if query.startswith('artist:"') else None
-        for offset in (0, 10):
-            try:
-                response = spotify.api_request(
-                    "GET", "/search", token,
-                    params={"q": query, "type": "track", "limit": 10, "offset": offset},
-                )
-                rows = response.json().get("tracks", {}).get("items", []) or []
-            except Exception as exc:
-                print(f"[Tune Raider] instrumental-first Spotify query failed ({query}, offset={offset}): {exc}", flush=True)
-                break
-            for track in rows:
-                if not isinstance(track, dict):
-                    continue
-                uri = track.get("uri")
-                artists = track.get("artists") or []
-                name = str((artists[0] if artists else {}).get("name") or "").casefold()
-                if wanted_artist and name != wanted_artist:
-                    continue
-                if not uri or uri in seen:
-                    continue
-                seen.add(uri)
-                found.append(track)
-                if len(found) >= limit:
-                    break
-            if len(found) >= limit or len(rows) < 10:
+        try:
+            response = spotify.api_request(
+                "GET", "/search", token,
+                params={"q": query, "type": "track", "limit": 10, "offset": 0},
+            )
+            rows = response.json().get("tracks", {}).get("items", []) or []
+        except Exception as exc:
+            print(f"[Tune Raider] instrumental-first Spotify query failed ({query}): {exc}", flush=True)
+            continue
+        pool = []
+        for track in rows:
+            if not isinstance(track, dict) or not track.get("uri"):
+                continue
+            artists = track.get("artists") or []
+            name = str((artists[0] if artists else {}).get("name") or "").casefold()
+            if wanted_artist and name != wanted_artist:
+                continue
+            pool.append(track)
+        if pool:
+            pools.append(pool)
+
+    # Interleave the pools, preserving per-artist order while diversifying
+    # the set that will be checked against instrumental evidence.
+    for index in range(max((len(pool) for pool in pools), default=0)):
+        for pool in pools:
+            if index >= len(pool):
+                continue
+            track = pool[index]
+            uri = track["uri"]
+            if uri in seen:
+                continue
+            seen.add(uri)
+            found.append(track)
+            if len(found) >= limit:
                 break
         if len(found) >= limit:
             break
