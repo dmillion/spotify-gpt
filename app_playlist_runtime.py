@@ -40,6 +40,14 @@ def install(ns: dict) -> None:
         error.spotify_url = spotify_url
         raise error from exc
 
+    def _diverse_verified_count(tracks):
+        counts = {}
+        for track in tracks:
+            artists = track.get("artists") or []
+            artist = str((artists[0] if artists else {}).get("name") or "").casefold()
+            counts[artist] = min(3, counts.get(artist, 0) + 1)
+        return sum(counts.values())
+
     def create_from_prompt(prompt: str, excluded_tracks: list[str] | None = None, stage_callback=None) -> dict:
         def stage(name: str) -> None:
             if stage_callback:
@@ -96,8 +104,8 @@ def install(ns: dict) -> None:
                     f"{len(first_verified)} of {len(leads)} Spotify leads",
                     flush=True,
                 )
-            for attempt in range(2 if strict and len(verified_tracks) < ns["PLAYLIST_TRACK_LIMIT"] else 1):
-                if strict and len(verified_tracks) >= ns["PLAYLIST_TRACK_LIMIT"]:
+            for attempt in range(2 if strict and _diverse_verified_count(verified_tracks) < ns["PLAYLIST_TRACK_LIMIT"] else 1):
+                if strict and _diverse_verified_count(verified_tracks) >= ns["PLAYLIST_TRACK_LIMIT"]:
                     break
                 if attempt:
                     exclusions = list(excluded_tracks or []) + [
