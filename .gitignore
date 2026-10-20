@@ -221,3 +221,6 @@ __marimo__/
 # Local audio-library analysis data
 #/data/*.sqlite
 #/data/*.sqlite-*
+
+# Local SQLite backups (may contain private account and playlist data)
+/backups/
