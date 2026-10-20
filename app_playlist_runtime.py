@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from vocal_policy import enforce_resolved, filter_tracks, requires_instrumental
 import instrumental_discovery
+from playlist_prompt_metadata import spotify_description
 
 import json
 import os
@@ -275,7 +276,7 @@ def install(ns: dict) -> None:
         spotify_url = None
         stage("spotify_create")
         try:
-            playlist = spotify.create_playlist(token, name=name, description=description, public=False)
+            playlist = spotify.create_playlist(token, name=name, description=spotify_description(description, prompt), public=False)
             spotify_url = playlist.get("external_urls", {}).get("spotify")
         except Exception as exc:
             _stage_error("spotify_create", "Spotify playlist creation failed", exc)
