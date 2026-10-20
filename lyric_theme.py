@@ -10,16 +10,20 @@ import lrclib_client
 
 def intent(prompt):
     text = str(prompt or "").strip()
+    # Requires an explicit lyrical relationship, not merely an evocative genre
+    # adjective ("dark", "whiskey-soaked") or a title mentioning whiskey.
     if re.search(r"\b(?:lyrics?|words)\b", text, re.I) and re.search(
         r"\b(?:about|mention|contain|include|reference|theme|say|sing|with|featuring)\b", text, re.I
     ):
         return True
+    if re.search(r"\b(?:lyrically|lyrical\s+(?:themes?|content))\b", text, re.I):
+        return True
     return bool(re.search(
-        r"\b(?:songs?|tracks?|music|playlist)\s+(?:in\s+\w+\s+)?(?:about|concerning|dealing\s+with)\b|"
-        r"\b(?:songs?|tracks?)\s+(?:that\s+)?(?:mention|reference|discuss)\b|"
-        r"\b(?:lyrically|lyrical\s+(?:themes?|content))\b",
-        text, re.I
+        r"\b(?:songs?|tracks?|music|playlist)\b.{0,110}?\b"
+        r"(?:about|concerning|dealing\s+with|that\s+mention|that\s+reference)\b",
+        text, re.I,
     ))
+
 
 def subject(prompt):
     text = str(prompt or "").strip().rstrip(".?! ")
