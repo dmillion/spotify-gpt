@@ -642,6 +642,94 @@ def install(ns: dict) -> None:
         """
         return 0
 
+    history_sync_lock = threading.Lock()
+    history_sync_started = 0.0
+    history_sync_interval = max(30, int(os.environ.get("SPOTIFY_HISTORY_SYNC_INTERVAL", "60")))
+
+    def _refresh_saved_spotify_tracks() -> None:
+        """Refresh only known playlists. Never delete history on API failures."""
+        import time
+        try:
+            token_info = spotify.load_token()
+            if not token_info or not spotify.token_has_required_scopes(token_info):
+                return
+            token = token_info.get("access_token")
+            if not token:
+                return
+            with ns["database"]() as db:
+                rows = db.execute(
+                    "SELECT id, spotify_url FROM generated_playlists "
+                    "WHERE spotify_url IS NOT NULL AND spotify_url != ''"
+                ).fetchall()
+            changed = 0
+            for row in rows:
+                playlist_id = _spotify_playlist_id(row["spotify_url"])
+                if not playlist_id:
+                    continue
+                try:
+                    # Paginate and validate the complete result before updating.
+                    tracks = []
+                    offset = 0
+                    while True:
+                        payload = spotify.api_request(
+                            "GET", f"/playlists/{playlist_id}/items", token,
+                            params={"limit": 50, "offset": offset},
+                        ).json()
+                        if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
+                            raise ValueError("Spotify returned invalid playlist items")
+                        items = payload["items"]
+                        for entry in items:
+                            track = (entry or {}).get("item") or (entry or {}).get("track") or {}
+                            if not isinstance(track, dict) or not track.get("name"):
+                                continue
+                            if track.get("type") not in (None, "track"):
+                                continue
+                            tracks.append({
+                                "artist": ", ".join(a.get("name", "") for a in track.get("artists") or []),
+                                "title": track["name"],
+                                "url": (track.get("external_urls") or {}).get("spotify"),
+                            })
+                        offset += len(items)
+                        total = payload.get("total")
+                        if not isinstance(total, int):
+                            raise ValueError("Spotify playlist item count unavailable")
+                        if offset >= total:
+                            break
+                        if not items:
+                            raise ValueError("Spotify playlist response incomplete")
+                    with ns["database"]() as db:
+                        current = db.execute(
+                            "SELECT tracks FROM generated_playlists WHERE id=?", (row["id"],)
+                        ).fetchone()
+                        if current and json.loads(current["tracks"]) != tracks:
+                            db.execute(
+                                "UPDATE generated_playlists SET tracks=? WHERE id=?",
+                                (json.dumps(tracks), row["id"]),
+                            )
+                            changed += 1
+                except Exception as exc:
+                    print(f"[Tune Raider] Spotify history track refresh skipped for {playlist_id}: {exc}", flush=True)
+            print(f"[Tune Raider] Spotify history track refresh: {len(rows)} saved playlists checked, {changed} updated", flush=True)
+        except Exception as exc:
+            print(f"[Tune Raider] Spotify history track refresh failed: {exc}", flush=True)
+        finally:
+            history_sync_lock.release()
+
+    def _schedule_saved_spotify_refresh() -> None:
+        import time
+        nonlocal history_sync_started
+        now = time.monotonic()
+        if now - history_sync_started < history_sync_interval:
+            return
+        if not history_sync_lock.acquire(blocking=False):
+            return
+        history_sync_started = now
+        threading.Thread(
+            target=_refresh_saved_spotify_tracks,
+            name="spotify-history-track-refresh",
+            daemon=True,
+        ).start()
+
     @app.get("/")
     def home():
         return render_template("index.html", password_gate_enabled=bool(ns["APP_PASSWORD"]))
@@ -656,6 +744,7 @@ def install(ns: dict) -> None:
 
     @app.get("/api/history")
     def history():
+        _schedule_saved_spotify_refresh()
         with ns["database"]() as connection:
             rows = connection.execute(
                 "SELECT * FROM generated_playlists "
