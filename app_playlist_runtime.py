@@ -178,7 +178,30 @@ def install(ns: dict) -> None:
             error.spotify_url = None
             raise error
 
-        resolved = resolved[:ns["PLAYLIST_TRACK_LIMIT"]]
+        if strict:
+            # Keep a discovery playlist from becoming a single-artist collection.
+            # Round-robin confirmed recordings across artists, capped at three
+            # per artist. If fewer than requested qualify, publish fewer songs.
+            by_artist = {}
+            for track in resolved:
+                artists = track.get("artists") or []
+                key = str((artists[0] if artists else {}).get("name") or "").casefold()
+                by_artist.setdefault(key, []).append(track)
+            balanced = []
+            for tier in range(3):
+                for artist_tracks in by_artist.values():
+                    if len(artist_tracks) > tier:
+                        balanced.append(artist_tracks[tier])
+                        if len(balanced) >= ns["PLAYLIST_TRACK_LIMIT"]:
+                            break
+                if len(balanced) >= ns["PLAYLIST_TRACK_LIMIT"]:
+                    break
+            print(f"[Tune Raider] instrumental artist balance: {len(balanced)} tracks "
+                  f"across {len(set(str((t.get('artists') or [{}])[0].get('name') or '').casefold() for t in balanced))} artists",
+                  flush=True)
+            resolved = balanced
+        else:
+            resolved = resolved[:ns["PLAYLIST_TRACK_LIMIT"]]
         generated["tracks"] = all_candidates
         description = str(generated.get("description") or spotify.DEFAULT_DESCRIPTION).strip()
         name = str(generated.get("name") or "New Playlist").strip()
