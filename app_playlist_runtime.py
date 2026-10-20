@@ -6,6 +6,7 @@ import instrumental_discovery
 from playlist_prompt_metadata import spotify_description
 
 import json
+from html import unescape
 import os
 import queue
 import re
@@ -567,8 +568,8 @@ def install(ns: dict) -> None:
         )
 
     def row_to_result(row) -> dict:
-        return {"id": row["id"], "source": row["source"], "source_tracks": json.loads(row["source_tracks"]), "prompt": row["prompt"],
-                "name": row["name"], "description": row["description"], "tracks": json.loads(row["tracks"]),
+        return {"id": row["id"], "source": row["source"], "source_tracks": json.loads(row["source_tracks"]), "prompt": unescape(row["prompt"]),
+                "name": unescape(row["name"]), "description": unescape(row["description"]), "tracks": json.loads(row["tracks"]),
                 "spotify_url": row["spotify_url"], "created_at": row["created_at"]}
 
     def _spotify_playlist_id(value: str | None) -> str:
@@ -656,7 +657,12 @@ def install(ns: dict) -> None:
     @app.get("/api/history")
     def history():
         with ns["database"]() as connection:
-            rows = connection.execute("SELECT * FROM generated_playlists ORDER BY id DESC LIMIT 30").fetchall()
+            rows = connection.execute(
+                "SELECT * FROM generated_playlists "
+                "ORDER BY CASE WHEN source='spotify_import' THEN 1 ELSE 0 END ASC, "
+                "CASE WHEN source='spotify_import' THEN id END ASC, "
+                "CASE WHEN source!='spotify_import' THEN id END DESC LIMIT 30"
+            ).fetchall()
         return jsonify([row_to_result(row) for row in rows])
 
     @app.get("/api/usage")
