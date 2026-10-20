@@ -86,6 +86,7 @@ def install(ns: dict) -> None:
             if strict:
                 # Prefer targeted instrumental-scene discovery rather than first
                 # curating mostly vocal doom tracks and rejecting them afterward.
+                stage("instrumental_discovery")
                 leads = instrumental_discovery.discover(
                     token, spotify, prompt, seen_uris, limit=100,
                 )
@@ -94,6 +95,7 @@ def install(ns: dict) -> None:
                     if uri and uri not in seen_uris:
                         resolved.append(track)
                         seen_uris.add(uri)
+                stage("instrumental_verification")
                 first_verified, first_rejected = filter_tracks(
                     prompt, leads, resolved=True,
                 )
@@ -116,6 +118,7 @@ def install(ns: dict) -> None:
                         "in the requested genres. Favor releases with documented track-level "
                         "instrumental status. Do not repeat previous candidates."
                     )
+                    stage("instrumental_fallback")
                     try:
                         extra = ns["ask_for_hybrid_playlist"](recovery_prompt, exclusions)
                         candidates = list(extra.get("tracks") or [])
@@ -126,6 +129,7 @@ def install(ns: dict) -> None:
                     print(f"[Tune Raider] instrumental recovery: {len(candidates)} additional candidates", flush=True)
                 else:
                     if strict:
+                        stage("instrumental_fallback")
                         try:
                             base = ns["ask_for_hybrid_playlist"](
                                 prompt,
@@ -391,6 +395,9 @@ def install(ns: dict) -> None:
         "curation": 8,
         "spotify_auth": 58,
         "spotify_resolution": 68,
+        "instrumental_discovery": 69,
+        "instrumental_verification": 73,
+        "instrumental_fallback": 79,
         "spotify_create": 86,
         "spotify_write": 92,
         "history_save": 97,
