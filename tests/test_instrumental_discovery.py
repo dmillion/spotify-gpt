@@ -13,6 +13,14 @@ class InstrumentalFirstTests(unittest.TestCase):
         self.assertIn('artist:"Belzebong"', queries)
         self.assertNotIn('artist:"Tycho"', queries)
 
+    def test_seeded_heavy_discovery_avoids_ambiguous_doom_keyword_query(self):
+        queries = instrumental_discovery._search_queries(
+            "20 instrumental stoner rock and psychedelic doom tracks, no vocals"
+        )
+        self.assertTrue(any(q.startswith('artist:"') for q in queries))
+        self.assertFalse(any(q == "stoner rock psychedelic doom instrumental" for q in queries))
+        self.assertFalse(any(not q.startswith('artist:"') for q in queries))
+
     def test_unknown_style_does_not_force_heavy_artists(self):
         queries = instrumental_discovery._search_queries("instrumental classical piano")
         self.assertFalse(any(q.startswith('artist:"') for q in queries))
