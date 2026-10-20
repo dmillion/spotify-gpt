@@ -1,6 +1,7 @@
 """Base hybrid curator installed into app.py."""
 from __future__ import annotations
 from vocal_policy import guidance
+from lyric_theme import intent as lyrical_intent
 import json
 import sqlite3
 
@@ -38,6 +39,10 @@ def install(ns: dict) -> None:
                 cid = f"lastfm:{index}"
                 candidate_map[cid] = {"artist": row["artist"], "title": row["title"], "source": "lastfm"}
                 model_candidates.append({"candidate_id": cid, **row})
+            lyrical_guidance = (" For this explicit lyrical-theme request, prioritize candidates whose lyrics are likely "
+                                "to substantively address the named subject, not merely genre mood or artist association. "
+                                "A later LRCLIB verification step will reject unsupported guesses. "
+                                if lyrical_intent(prompt) else "")
             exclusion = ""
             if excluded_tracks:
                 exclusion = "\nDo not repeat these tracks from the previous version:\n- " + "\n- ".join(excluded_tracks)
@@ -45,7 +50,7 @@ def install(ns: dict) -> None:
                 "Curate a ranked playlist from the supplied hybrid candidate pool. Return JSON: "
                 '{"name":"short name","description":"one sentence","tracks":[{"candidate_id":"local:123"}]}. '
                 f"Return up to {ns['PLAYLIST_TRACK_LIMIT'] + 10} ranked choices. Treat named artists as anchors, favor coherent variety, and use only supplied candidate_id values. Candidate pool: "
-                + guidance(prompt) + json.dumps(model_candidates, separators=(",", ":")) + exclusion,
+                + guidance(prompt) + lyrical_guidance + json.dumps(model_candidates, separators=(",", ":")) + exclusion,
                 prompt, ns["PLAYLIST_SCHEMA"], stage="final curation",
             )
             if not isinstance(payload, dict) or not isinstance(payload.get("tracks"), list):
