@@ -52,28 +52,32 @@ def discover(token, spotify, prompt, excluded_uris=(), *, limit=100):
     found = []
     queries = _search_queries(prompt)
     for query in queries:
-        try:
-            response = spotify.api_request(
-                "GET", "/search", token, params={"q": query, "type": "track", "limit": 20}
-            )
-            rows = response.json().get("tracks", {}).get("items", []) or []
-        except Exception as exc:
-            print(f"[Tune Raider] instrumental-first Spotify query failed ({query}): {exc}", flush=True)
-            continue
         wanted_artist = query[len('artist:"'):-1].casefold() if query.startswith('artist:"') else None
-        for track in rows:
-            if not isinstance(track, dict):
-                continue
-            uri = track.get("uri")
-            artists = track.get("artists") or []
-            name = str((artists[0] if artists else {}).get("name") or "").casefold()
-            if wanted_artist and name != wanted_artist:
-                continue
-            if not uri or uri in seen:
-                continue
-            seen.add(uri)
-            found.append(track)
-            if len(found) >= limit:
+        for offset in (0, 10):
+            try:
+                response = spotify.api_request(
+                    "GET", "/search", token,
+                    params={"q": query, "type": "track", "limit": 10, "offset": offset},
+                )
+                rows = response.json().get("tracks", {}).get("items", []) or []
+            except Exception as exc:
+                print(f"[Tune Raider] instrumental-first Spotify query failed ({query}, offset={offset}): {exc}", flush=True)
+                break
+            for track in rows:
+                if not isinstance(track, dict):
+                    continue
+                uri = track.get("uri")
+                artists = track.get("artists") or []
+                name = str((artists[0] if artists else {}).get("name") or "").casefold()
+                if wanted_artist and name != wanted_artist:
+                    continue
+                if not uri or uri in seen:
+                    continue
+                seen.add(uri)
+                found.append(track)
+                if len(found) >= limit:
+                    break
+            if len(found) >= limit or len(rows) < 10:
                 break
         if len(found) >= limit:
             break
