@@ -37,7 +37,9 @@ def _search_queries(prompt):
                           "and", "absolutely", "for", "me", "the", "without"}]
     style = " ".join(dict.fromkeys(terms[:4]))
     queries = [f'artist:"{artist}"' for artist in dict.fromkeys(artists)]
-    if style:
+    if style and not artists:
+        # Generic full-text matching confuses words like "doom" with artist
+        # names (e.g. MF DOOM); seeded genre requests do not need it.
         queries.append(style + " instrumental")
     return queries[:16]
 
