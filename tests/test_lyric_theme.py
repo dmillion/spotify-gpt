@@ -16,6 +16,28 @@ class LyricalIntentTests(unittest.TestCase):
                        "instrumental stoner rock and doom, absolutely no vocals"):
             self.assertFalse(lyric_theme.intent(prompt))
 
+    def test_theme_discovery_uses_spotify_and_deduplicates(self):
+        from unittest.mock import Mock
+        spotify = Mock()
+        track = {"uri": "spotify:track:one", "name": "Whiskey Blues",
+                 "artists": [{"name": "Heavy Band"}]}
+        spotify.api_request.return_value.json.return_value = {
+            "tracks": {"items": [track, track]}
+        }
+        found = lyric_theme.discover(
+            "token", spotify, "Find stoner sludge doom songs about whiskey",
+            limit=10,
+        )
+        self.assertEqual(found, [track])
+        self.assertTrue(any(
+            'whiskey' in call.kwargs['params']['q'].lower()
+            for call in spotify.api_request.call_args_list
+        ))
+        self.assertTrue(all(
+            call.kwargs['params']['limit'] <= 10
+            for call in spotify.api_request.call_args_list
+        ))
+
     def test_unavailable_lyrics_are_not_accepted(self):
         track = {"name": "Song", "artists": [{"name": "Band"}]}
         with patch.object(lyric_theme, "lyrics_for_track", return_value=None):
