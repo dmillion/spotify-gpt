@@ -70,6 +70,62 @@ def lyrics_for_track(track):
             return {"text": str(lyrics), "source": f"https://lrclib.net/api/get/{row.get('id')}"}
     return None
 
+def discover(token, spotify, prompt, excluded_uris=(), *, limit=50):
+    """Discover new lyrical candidates using Spotify title/genre search.
+
+    Title terms are discovery hints, not proof that lyrics match. Searches are
+    bounded and only invoked for explicit lyric requests.
+    """
+    topic = subject(prompt)
+    if not topic:
+        return []
+    words = re.findall(r"[a-z0-9]+", topic.casefold())
+    if not words:
+        return []
+    # Keep user-supplied genres as constraints in initial queries, but do not
+    # require titles to mention the theme in the final broad search.
+    genre_words = [
+        word for word in re.findall(r"[a-z]+", prompt.casefold())
+        if word in {"stoner", "sludge", "doom", "metal", "rock", "blues",
+                    "country", "punk", "folk", "psychedelic", "soul", "jazz"}
+    ]
+    genres = list(dict.fromkeys(genre_words))[:3]
+    phrase = " ".join(words[:4])
+    queries = []
+    for genre in genres:
+        queries.append(f'track:"{phrase}" {genre}')
+    queries.append(f'track:"{phrase}"')
+    for genre in genres[:2]:
+        queries.append(f'{phrase} {genre}')
+    seen = set(excluded_uris)
+    found = []
+    for query in queries:
+        for offset in (0, 10):
+            try:
+                payload = spotify.api_request(
+                    "GET", "/search", token,
+                    params={"q": query, "type": "track", "limit": 10, "offset": offset},
+                ).json()
+                rows = (payload.get("tracks") or {}).get("items") or []
+            except Exception as exc:
+                print(f"[Tune Raider] lyric discovery Spotify search failed ({query}): {exc}", flush=True)
+                break
+            for track in rows:
+                uri = track.get("uri") if isinstance(track, dict) else None
+                if not uri or uri in seen:
+                    continue
+                seen.add(uri)
+                found.append(track)
+                if len(found) >= limit:
+                    break
+            if len(found) >= limit or len(rows) < 10:
+                break
+        if len(found) >= limit:
+            break
+    print(f"[Tune Raider] lyrical discovery: {len(found)} Spotify candidates from {len(queries)} queries", flush=True)
+    return found
+
+
 def verify(prompt, tracks, model_json, *, limit=40):
     """Return confirmed thematic candidates, with no fallback to unknowns."""
     topic = subject(prompt)
