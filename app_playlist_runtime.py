@@ -188,9 +188,30 @@ def install(ns: dict) -> None:
                 stage("lyric_verification")
                 resolved, lyrical_rejections = lyric_theme.verify(prompt, resolved, ns["model_json"])
                 constraint_rejections.extend(lyrical_rejections)
+                if len(resolved) < ns["PLAYLIST_TRACK_LIMIT"]:
+                    stage("lyric_discovery")
+                    more = lyric_theme.discover(token, spotify, prompt, seen_uris, limit=50)
+                    for track in more:
+                        if track.get("uri"):
+                            seen_uris.add(track["uri"])
+                    stage("lyric_verification")
+                    verified_more, rejected_more = lyric_theme.verify(
+                        prompt, more, ns["model_json"], limit=50,
+                    )
+                    constraint_rejections.extend(rejected_more)
+                    matched_uris = {track.get("uri") for track in resolved}
+                    for track in verified_more:
+                        if track.get("uri") not in matched_uris:
+                            resolved.append(track)
+                            matched_uris.add(track.get("uri"))
+                    print(
+                        f"[Tune Raider] lyrical theme confirmed {len(resolved)} tracks "
+                        "after expanded Spotify discovery", flush=True,
+                    )
                 if not resolved:
                     _stage_error("lyric_verification", "Lyrical theme could not be verified",
-                                 ValueError("No selected tracks had lyrics confirming the requested theme. No playlist was written."))
+                                 ValueError("No candidate had lyrics confirming the requested theme. "
+                                            "LRCLIB coverage may be incomplete. No playlist was written."))
 
         if not resolved:
             error = AppError("Spotify could not resolve any tracks from the generated playlist.")
@@ -464,6 +485,7 @@ def install(ns: dict) -> None:
         "instrumental_fallback": 79,
         "instrumental_naming": 83,
         "lyric_verification": 80,
+        "lyric_discovery": 76,
         "spotify_create": 86,
         "spotify_write": 92,
         "history_save": 97,
