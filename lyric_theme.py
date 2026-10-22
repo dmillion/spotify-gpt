@@ -6,6 +6,7 @@ included in playlist descriptions. Missing lyrics are not a thematic match.
 from __future__ import annotations
 
 import re
+from collections import Counter
 import lrclib_client
 
 def intent(prompt):
@@ -41,6 +42,8 @@ def lyrics_for_track(track):
     if not artist or not title:
         return None
     rows = []
+    if lrclib_client.cooldown_active():
+        return None
     if album and duration:
         exact = lrclib_client.request("/get", {
             "artist_name": artist, "track_name": title,
@@ -48,7 +51,7 @@ def lyrics_for_track(track):
         })
         if isinstance(exact, dict):
             rows.append(exact)
-    search = lrclib_client.request("/search", {"artist_name": artist, "track_name": title})
+    search = None if rows or lrclib_client.cooldown_active() else lrclib_client.request("/search", {"artist_name": artist, "track_name": title})
     if isinstance(search, list):
         rows.extend(search)
     for row in rows:
@@ -132,10 +135,15 @@ def verify(prompt, tracks, model_json, *, limit=40):
     if not topic:
         return [], [f"{t.get('name', '')} (lyric theme not specified)" for t in tracks]
     accepted, rejected = [], []
+    reasons = Counter()
     schema = {"type": "object", "properties": {
         "matches": {"type": "boolean"},
     }, "required": ["matches"], "additionalProperties": False}
     for track in tracks[:limit]:
+        if lrclib_client.cooldown_active():
+            reasons["LRCLIB unavailable"] += 1
+            print("[Tune Raider] lyric verification interrupted: LRCLIB cooldown active", flush=True)
+            break
         artist = ", ".join(a.get("name", "") for a in track.get("artists") or [])
         title = str(track.get("name") or "")
         try:
@@ -145,6 +153,7 @@ def verify(prompt, tracks, model_json, *, limit=40):
             record = None
         if not record:
             rejected.append(f"{artist} - {title} (lyrics unavailable)")
+            reasons["lyrics unavailable"] += 1
             continue
         # For exact word requests, require a literal match; thematic requests
         # are assessed semantically by the model.
@@ -169,4 +178,7 @@ def verify(prompt, tracks, model_json, *, limit=40):
             print(f"[Tune Raider] lyrical match: {artist} - {title} via {record['source']}", flush=True)
         else:
             rejected.append(f"{artist} - {title} (theme not supported)")
+            reasons["theme not supported"] += 1
+    print(f"[Tune Raider] lyric verification summary: checked {len(accepted) + len(rejected)}, "
+          f"matched {len(accepted)}, reasons={dict(reasons)}", flush=True)
     return accepted, rejected
