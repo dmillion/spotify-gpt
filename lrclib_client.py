@@ -16,6 +16,11 @@ _last_request = 0.0
 _rate_limited_until = 0.0
 
 
+def cooldown_active():
+    """True while LRCLIB has asked us to stop making requests."""
+    return time.monotonic() < _rate_limited_until
+
+
 def norm(value):
     return " ".join(re.sub(r"[^\w\s]", " ", str(value or "").casefold()).split())
 
