@@ -46,6 +46,16 @@ class LyricalIntentTests(unittest.TestCase):
         self.assertEqual(accepted, [])
         self.assertEqual(len(rejected), 1)
 
+    def test_lrclib_cooldown_stops_lyric_verification(self):
+        track = {"name": "Song", "artists": [{"name": "Band"}]}
+        with patch.object(lyric_theme.lrclib_client, "cooldown_active", return_value=True):
+            with patch.object(lyric_theme, "lyrics_for_track") as lookup:
+                accepted, rejected = lyric_theme.verify("songs about whiskey", [track],
+                                                         lambda *a, **kw: {"matches": True})
+        self.assertEqual(accepted, [])
+        self.assertEqual(rejected, [])
+        lookup.assert_not_called()
+
     def test_semantic_lyrics_matching(self):
         track = {"name": "Song", "artists": [{"name": "Band"}]}
         calls = []
