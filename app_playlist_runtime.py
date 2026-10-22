@@ -4,6 +4,7 @@ from __future__ import annotations
 from vocal_policy import enforce_resolved, filter_tracks, requires_instrumental
 import instrumental_discovery
 import lyric_theme
+import lrclib_client
 from playlist_prompt_metadata import spotify_description
 
 import json
@@ -188,7 +189,7 @@ def install(ns: dict) -> None:
                 stage("lyric_verification")
                 resolved, lyrical_rejections = lyric_theme.verify(prompt, resolved, ns["model_json"])
                 constraint_rejections.extend(lyrical_rejections)
-                if len(resolved) < ns["PLAYLIST_TRACK_LIMIT"]:
+                if len(resolved) < ns["PLAYLIST_TRACK_LIMIT"] and not lrclib_client.cooldown_active():
                     stage("lyric_discovery")
                     more = lyric_theme.discover(token, spotify, prompt, seen_uris, limit=50)
                     for track in more:
@@ -209,9 +210,11 @@ def install(ns: dict) -> None:
                         "after expanded Spotify discovery", flush=True,
                     )
                 if not resolved:
-                    _stage_error("lyric_verification", "Lyrical theme could not be verified",
-                                 ValueError("No candidate had lyrics confirming the requested theme. "
-                                            "LRCLIB coverage may be incomplete. No playlist was written."))
+                    reason = ("LRCLIB is temporarily unavailable (HTTP 429/503). Retry later; no playlist was written."
+                              if lrclib_client.cooldown_active() else
+                              "No candidate had lyrics confirming the requested theme. "
+                              "LRCLIB coverage may be incomplete. No playlist was written.")
+                    _stage_error("lyric_verification", "Lyrical theme could not be verified", ValueError(reason))
 
         if not resolved:
             error = AppError("Spotify could not resolve any tracks from the generated playlist.")
