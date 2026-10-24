@@ -5,6 +5,7 @@ from vocal_policy import enforce_resolved, filter_tracks, requires_instrumental
 import instrumental_discovery
 import lyric_theme
 import lrclib_client
+import spotify_history_reconcile
 from playlist_prompt_metadata import spotify_description
 
 import json
@@ -701,8 +702,24 @@ def install(ns: dict) -> None:
                     "SELECT id, spotify_url FROM generated_playlists "
                     "WHERE spotify_url IS NOT NULL AND spotify_url != ''"
                 ).fetchall()
+            removed = 0
+            try:
+                with ns["database"]() as db:
+                    removed = spotify_history_reconcile.archive_missing(
+                        db, rows, spotify, token, _spotify_playlist_id,
+                    )
+            except Exception as exc:
+                print(f"[Tune Raider] Spotify deletion reconciliation skipped: {exc}", flush=True)
+            removed_ids = set()
+            if removed:
+                with ns["database"]() as db:
+                    removed_ids = {row["original_id"] for row in db.execute(
+                        "SELECT original_id FROM spotify_history_archive"
+                    ).fetchall()}
             changed = 0
             for row in rows:
+                if row["id"] in removed_ids:
+                    continue
                 playlist_id = _spotify_playlist_id(row["spotify_url"])
                 if not playlist_id:
                     continue
@@ -749,7 +766,7 @@ def install(ns: dict) -> None:
                             changed += 1
                 except Exception as exc:
                     print(f"[Tune Raider] Spotify history track refresh skipped for {playlist_id}: {exc}", flush=True)
-            print(f"[Tune Raider] Spotify history track refresh: {len(rows)} saved playlists checked, {changed} updated", flush=True)
+            print(f"[Tune Raider] Spotify history track refresh: {len(rows)} saved playlists checked, {changed} updated, {removed} archived as deleted", flush=True)
         except Exception as exc:
             print(f"[Tune Raider] Spotify history track refresh failed: {exc}", flush=True)
         finally:
