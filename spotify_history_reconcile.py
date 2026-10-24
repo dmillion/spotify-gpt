@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import json
+from collections import defaultdict
+from html import unescape
 from datetime import datetime, timezone
 
 
-def complete_owned_snapshot(spotify, token):
+def complete_owned_snapshot(spotify, token, *, with_names=False):
     """Return playlist IDs only after a complete, internally consistent listing."""
-    found = set()
+    found = {}
     offset = 0
     total = None
     while True:
@@ -33,7 +35,9 @@ def complete_owned_snapshot(spotify, token):
         for item in items:
             if not isinstance(item, dict) or not item.get("id"):
                 raise ValueError("Invalid Spotify playlist item")
-            found.add(str(item["id"]))
+            if with_names and not isinstance(item.get("name"), str):
+                raise ValueError("Spotify playlist listing omitted a name")
+            found[str(item["id"])] = str(item.get("name") or "")
         offset += len(items)
         if offset >= total:
             break
@@ -42,7 +46,7 @@ def complete_owned_snapshot(spotify, token):
         raise ValueError("Empty Spotify playlist listing; refusing to reconcile deletions")
     if len(found) != total:
         raise ValueError("Spotify playlist listing contained duplicates or missing records")
-    return found
+    return found if with_names else set(found)
 
 
 def confirm_missing(spotify, token, playlist_id):
@@ -54,39 +58,54 @@ def confirm_missing(spotify, token, playlist_id):
     return False
 
 
+def _name(value):
+    return " ".join(unescape(str(value or "")).casefold().split())
+
+
 def archive_missing(db, rows, spotify, token, playlist_id_from_url):
-    """Archive then hide confirmed missing entries in a single SQLite transaction."""
-    available = complete_owned_snapshot(spotify, token)
+    """Reconcile name counts, preferring missing IDs when duplicate names exist."""
+    first = complete_owned_snapshot(spotify, token, with_names=True)
+    second = complete_owned_snapshot(spotify, token, with_names=True)
+    if first != second or not first:
+        raise ValueError("Spotify inventories inconsistent or empty; no history changes")
+    remote_by_name = defaultdict(set)
+    for playlist_id, name in first.items():
+        remote_by_name[_name(name)].add(playlist_id)
+    local_by_name = defaultdict(list)
+    for row in rows:
+        if row["spotify_url"]:
+            local_by_name[_name(row["name"])].append(row)
+    candidates = []
+    for name, local_rows in local_by_name.items():
+        remote_ids = remote_by_name.get(name, set())
+        excess = len(local_rows) - len(remote_ids)
+        if excess <= 0:
+            continue
+        missing = sorted(
+            (row for row in local_rows
+             if playlist_id_from_url(row["spotify_url"]) not in remote_ids),
+            key=lambda row: row["id"],
+        )
+        if len(missing) < excess:
+            continue
+        candidates.extend(missing[:excess])
+    print(f"[Tune Raider] history name reconciliation: {len(first)} Spotify playlists, "
+          f"{len(rows)} linked rows, {len(candidates)} excess entries", flush=True)
+    if len(candidates) > 3:
+        raise ValueError("Refusing bulk archive of more than 3 history entries")
+    if not candidates:
+        return 0
     db.execute(
         "CREATE TABLE IF NOT EXISTS spotify_history_archive "
         "(original_id INTEGER PRIMARY KEY, playlist_id TEXT, archived_at TEXT NOT NULL, "
         "row_data TEXT NOT NULL)"
     )
-    absent = [
-        row for row in rows
-        if (playlist_id_from_url(row["spotify_url"])
-            and playlist_id_from_url(row["spotify_url"]) not in available)
-    ]
-    print(f"[Tune Raider] history inventory: Spotify lists {len(available)} playlists; "
-          f"{len(rows)} local linked rows; {len(absent)} missing IDs", flush=True)
-    if not absent:
-        return 0
-    # Removing a playlist from Spotify's library need not make its URL 404.
-    # Require a second complete, consistent listing before archiving anything.
-    confirmed_available = complete_owned_snapshot(spotify, token)
-    if confirmed_available != available:
-        raise ValueError("Spotify playlist IDs changed between checks; refusing to archive")
-    # Guard against another mass-deletion incident, even on a valid-looking snapshot.
-    if len(absent) > 3:
-        raise ValueError(f"{len(absent)} playlists appear missing; refusing bulk archive (limit 3 per sync)")
     removed = 0
-    for row in absent:
-        playlist_id = playlist_id_from_url(row["spotify_url"])
-        if not playlist_id or playlist_id in confirmed_available:
-            continue
+    for row in candidates:
         full = db.execute("SELECT * FROM generated_playlists WHERE id=?", (row["id"],)).fetchone()
         if full is None:
             continue
+        playlist_id = playlist_id_from_url(row["spotify_url"])
         db.execute(
             "INSERT OR IGNORE INTO spotify_history_archive "
             "(original_id,playlist_id,archived_at,row_data) VALUES (?,?,?,?)",
@@ -95,5 +114,5 @@ def archive_missing(db, rows, spotify, token, playlist_id_from_url):
         )
         db.execute("DELETE FROM generated_playlists WHERE id=?", (row["id"],))
         removed += 1
-        print(f"[Tune Raider] archived missing Spotify playlist {playlist_id} (local row {row['id']})", flush=True)
+        print(f"[Tune Raider] archived missing {row['name']!r} (Spotify {playlist_id})", flush=True)
     return removed
