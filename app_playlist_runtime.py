@@ -699,7 +699,7 @@ def install(ns: dict) -> None:
                 return
             with ns["database"]() as db:
                 rows = db.execute(
-                    "SELECT id, spotify_url FROM generated_playlists "
+                    "SELECT id, name, spotify_url FROM generated_playlists "
                     "WHERE spotify_url IS NOT NULL AND spotify_url != ''"
                 ).fetchall()
             removed = 0
