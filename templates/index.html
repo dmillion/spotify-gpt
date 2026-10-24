@@ -1221,7 +1221,7 @@
   loadMachineStatus();
   loadPromptIdeas();
   const resumedGeneration = savedActiveGeneration();
-  if (resumedGeneration?.requestId && resumedGeneration?.body?.prompt) {
+  if (resumedGeneration?.requestId && resumedGeneration?.url) {
     pendingGeneration = resumedGeneration;
     reconcileGeneration(resumedGeneration);
   }
