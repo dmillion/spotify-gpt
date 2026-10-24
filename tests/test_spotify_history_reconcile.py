@@ -22,12 +22,6 @@ class SpotifyHistoryReconcileTests(unittest.TestCase):
 
     def test_identical_names_do_not_collide(self):
         spotify = Mock()
-        spotify.api_request.side_effect = [
-            Mock(status_code=200, json=lambda: {
-                "total": 1, "items": [{"id": "present456"}]
-            }),
-            Exception("not used"),
-        ]
         def request(method, path, token, **kwargs):
             if path == "/me/playlists":
                 return Mock(status_code=200, json=lambda: {
