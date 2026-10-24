@@ -415,7 +415,7 @@ def install(ns: dict) -> None:
                 (request_id,),
             ).fetchone()
 
-    def _begin_generation_job(request_id: str, prompt: str, retry: bool) -> tuple[str, dict | None]:
+    def _begin_generation_job(request_id: str, prompt: str, retry: bool, excluded_tracks=None) -> tuple[str, dict | None]:
         now = datetime.now(timezone.utc).isoformat()
         with ns["database"]() as connection:
             row = connection.execute(
@@ -449,8 +449,8 @@ def install(ns: dict) -> None:
             if running_count + queued_count >= generation_queue_limit + 1:
                 return "full", None
             connection.execute(
-                "INSERT INTO generation_requests (request_id,prompt,status,stage,progress,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
-                (request_id, prompt, "queued", "queued", 0, now, now),
+                "INSERT INTO generation_requests (request_id,prompt,status,stage,progress,created_at,updated_at,excluded_tracks) VALUES (?,?,?,?,?,?,?,?)",
+                (request_id, prompt, "queued", "queued", 0, now, now, json.dumps(excluded_tracks or [])),
             )
         return "start", None
 
@@ -523,8 +523,12 @@ def install(ns: dict) -> None:
                 current = db.execute("SELECT cancel_requested FROM generation_requests WHERE request_id=?", (request_id,)).fetchone()
             if current and current["cancel_requested"]:
                 raise GenerationCancelled("Canceled while queued.")
+            with ns["database"]() as db:
+                job = db.execute("SELECT excluded_tracks FROM generation_requests WHERE request_id=?", (request_id,)).fetchone()
+            exclusions = json.loads(job["excluded_tracks"] or "[]") if job else []
             result = create_from_prompt(
                 prompt,
+                excluded_tracks=exclusions,
                 stage_callback=lambda stage: _update_generation_stage(request_id, stage),
             )
             _finish_generation_job(request_id, result)
@@ -907,12 +911,32 @@ def install(ns: dict) -> None:
     @app.post("/api/history/<int:playlist_id>/regenerate")
     def regenerate(playlist_id: int):
         with ns["database"]() as connection:
-            row = connection.execute("SELECT * FROM generated_playlists WHERE id = ?", (playlist_id,)).fetchone()
-        if not row: return jsonify({"error": "That playlist is no longer in local history."}), 404
-        old = [f"{t['artist']} - {t['title']}" for t in (json.loads(row["source_tracks"]) or json.loads(row["tracks"]))]
-        try: return jsonify(create_from_prompt(row["prompt"], old))
-        except (AppError, requests.RequestException, spotify.SpotifyError) as exc:
-            return jsonify({"error": str(exc), "help_url": getattr(exc, "help_url", None)}), getattr(exc, "status_code", 502)
+            row = connection.execute("SELECT * FROM generated_playlists WHERE id=?", (playlist_id,)).fetchone()
+        if not row:
+            return jsonify({"error": "That playlist is no longer in local history."}), 404
+        if not str(row["prompt"] or "").strip():
+            return jsonify({"error": "This imported playlist has no saved prompt to regenerate."}), 400
+        previous = json.loads(row["source_tracks"] or "[]") or json.loads(row["tracks"] or "[]")
+        exclusions = [f"{t['artist']} - {t['title']}" for t in previous
+                      if isinstance(t, dict) and t.get("artist") and t.get("title")]
+        body = request.get_json(silent=True) or {}
+        request_id = _generation_request_id(body.get("request_id")) or __import__("uuid").uuid4().hex
+        _ensure_generation_worker()
+        with generation_worker_lock:
+            state, existing = _begin_generation_job(
+                request_id, row["prompt"], bool(body.get("retry")), exclusions,
+            )
+            if state == "start":
+                _launch_generation_job(request_id, row["prompt"])
+        if state == "complete":
+            return jsonify(existing)
+        if state in {"running", "queued", "start"}:
+            job = _generation_job(request_id)
+            return jsonify(_generation_job_payload(job)), 202
+        if state == "full":
+            return jsonify({"error": "Tune Raider's generation queue is full.",
+                            "status": "queue_full", "queue_limit": generation_queue_limit}), 429
+        return jsonify(existing or {"error": "Regeneration could not be queued."}), 409
 
     ns.update({"create_from_prompt": create_from_prompt, "row_to_result": row_to_result, "home": home,
                "library_status": library_status, "history": history, "token_usage": token_usage,
