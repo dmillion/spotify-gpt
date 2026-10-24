@@ -44,6 +44,24 @@ class SpotifyHistoryReconcileTests(unittest.TestCase):
         self.assertEqual(self.db.execute(
             "SELECT COUNT(*) FROM spotify_history_archive").fetchone()[0], 1)
 
+    def test_matching_name_count_keeps_history_even_with_different_ids(self):
+        spotify = Mock()
+        spotify.api_request.return_value = Mock(
+            status_code=200, json=lambda: {"total": 2, "items": [
+                {"id": "other111", "name": "Psych Rock Progression"},
+                {"id": "other222", "name": "Psych Rock Progression"},
+            ]}
+        )
+        rows = self.db.execute("SELECT id, name, spotify_url FROM generated_playlists").fetchall()
+        with self.db:
+            removed = reconcile.archive_missing(
+                self.db, rows, spotify, "token",
+                lambda url: url.rsplit("/", 1)[-1],
+            )
+        self.assertEqual(removed, 0)
+        self.assertEqual(self.db.execute(
+            "SELECT COUNT(*) FROM generated_playlists").fetchone()[0], 2)
+
     def test_incomplete_snapshot_does_not_remove_anything(self):
         spotify = Mock()
         spotify.api_request.return_value = Mock(
