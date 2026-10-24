@@ -67,6 +67,7 @@ def database():
     generation_columns = {row[1] for row in connection.execute("PRAGMA table_info(generation_requests)")}
     if "progress" not in generation_columns: connection.execute("ALTER TABLE generation_requests ADD COLUMN progress INTEGER NOT NULL DEFAULT 0")
     if "cancel_requested" not in generation_columns: connection.execute("ALTER TABLE generation_requests ADD COLUMN cancel_requested INTEGER NOT NULL DEFAULT 0")
+    if "excluded_tracks" not in generation_columns: connection.execute("ALTER TABLE generation_requests ADD COLUMN excluded_tracks TEXT NOT NULL DEFAULT '[]'")
     connection.commit(); return connection
 
 def require_configuration():
