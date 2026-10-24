@@ -2,6 +2,7 @@
 from __future__ import annotations
 from vocal_policy import guidance
 from lyric_theme import intent as lyrical_intent
+from musical_similarity import emphasis, rank
 import json
 import sqlite3
 
@@ -24,7 +25,15 @@ def install(ns: dict) -> None:
             if not isinstance(plan, dict):
                 raise ValueError("The model returned an invalid retrieval plan.")
             plan = ns["enrich_library_plan"](plan, library)
-            sound_axes = set(plan.get("sound", {})) if isinstance(plan.get("sound"), dict) else set()
+            sound = dict(plan.get("sound") or {})
+            emphasis_flags = emphasis(prompt)
+            defaults = {"tempo": 80, "rhythmic_density": 85, "loudness": 83,
+                        "low_mid_weight": 80, "noise_texture": 76}
+            for axis, target in defaults.items():
+                if emphasis_flags.get(axis) and axis not in sound:
+                    sound[axis] = target
+            plan["sound"] = sound
+            sound_axes = set(sound)
             local_candidates = library.candidates(plan, excluded_tracks or [], limit=ns["OLLAMA_LOCAL_CANDIDATE_LIMIT"])
             if not local_candidates:
                 raise ValueError("No unused library tracks remain for this request.")
@@ -39,6 +48,19 @@ def install(ns: dict) -> None:
                 cid = f"lastfm:{index}"
                 candidate_map[cid] = {"artist": row["artist"], "title": row["title"], "source": "lastfm"}
                 model_candidates.append({"candidate_id": cid, **row})
+            model_candidates = rank(model_candidates, plan, prompt)
+            measured = sum(c.get("musical_fit") is not None for c in model_candidates)
+            print(f"[Tune Raider] musical-fit ranking: {measured}/{len(model_candidates)} "
+                  f"measured candidate(s); weighted axes={list(emphasis_flags)}; "
+                  "song progression not directly measured", flush=True)
+            musical_guidance = (
+                " Prioritize requested tempo, driving rhythm, guitar intensity, "
+                "and evolving arrangement over broad artist or genre resemblance. "
+                "Candidate musical_fit and relevance_score favor measured acoustic "
+                "similarity for local tracks. Null musical_fit means no acoustic "
+                "measurement, not that a track sounds bad. Never invent audio "
+                "features for external tracks or claim progression is measured. "
+            )
             lyrical_guidance = (" For this explicit lyrical-theme request, prioritize candidates whose lyrics are likely "
                                 "to substantively address the named subject, not merely genre mood or artist association. "
                                 "A later LRCLIB verification step will reject unsupported guesses. "
@@ -50,7 +72,7 @@ def install(ns: dict) -> None:
                 "Curate a ranked playlist from the supplied hybrid candidate pool. Return JSON: "
                 '{"name":"short name","description":"one sentence","tracks":[{"candidate_id":"local:123"}]}. '
                 f"Return up to {ns['PLAYLIST_TRACK_LIMIT'] + 10} ranked choices. Treat named artists as anchors, favor coherent variety, and use only supplied candidate_id values. Candidate pool: "
-                + guidance(prompt) + lyrical_guidance + json.dumps(model_candidates, separators=(",", ":")) + exclusion,
+                + guidance(prompt) + musical_guidance + lyrical_guidance + json.dumps(model_candidates, separators=(",", ":")) + exclusion,
                 prompt, ns["PLAYLIST_SCHEMA"], stage="final curation",
             )
             if not isinstance(payload, dict) or not isinstance(payload.get("tracks"), list):
