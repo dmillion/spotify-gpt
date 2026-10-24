@@ -1121,7 +1121,7 @@
     button.disabled = true;
     status.textContent = 'CURATING / RESOLVING / GENERATING...';
 
-    const isGenerate = /\/api\/generate(?:\?|$)/.test(url);
+    const isGenerate = /\/api\/generate(?:\?|$)/.test(url) || /\/api\/history\/\d+\/regenerate(?:\?|$)/.test(url);
     const requestId = isGenerate ? (options.requestId || generationRequestId()) : null;
     const payload = {...body};
     if (requestId) payload.request_id = requestId;
