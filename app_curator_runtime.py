@@ -3,6 +3,7 @@ from __future__ import annotations
 from vocal_policy import guidance
 from lyric_theme import intent as lyrical_intent
 from musical_similarity import emphasis, rank
+from sound_selection import filter_selection
 import json
 import sqlite3
 
@@ -88,8 +89,12 @@ def install(ns: dict) -> None:
                 seen.add(key); artist_counts[artist_key] = artist_counts.get(artist_key, 0) + 1
                 selected.append(candidate)
                 if len(selected) >= ns["PLAYLIST_TRACK_LIMIT"]: break
+            selected, low_fit = filter_selection(prompt, selected, model_candidates)
+            if low_fit:
+                print(f"[Tune Raider] removed {len(low_fit)} low-fit measured candidates: "
+                      + "; ".join(low_fit), flush=True)
             if not selected:
-                raise ValueError("The hybrid playlist did not contain usable tracks.")
+                raise ValueError("No curated tracks passed the measured musical-fit check.")
             return {"name": str(payload.get("name") or "New Playlist").strip(),
                     "description": str(payload.get("description") or spotify.DEFAULT_DESCRIPTION).strip(),
                     "tracks": selected}
