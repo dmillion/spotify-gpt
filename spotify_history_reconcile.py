@@ -45,8 +45,11 @@ def complete_owned_snapshot(spotify, token):
 
 def confirm_missing(spotify, token, playlist_id):
     """Return True only for a definite HTTP 404, never for auth/network failures."""
-    response = spotify.api_request("GET", f"/playlists/{playlist_id}", token)
-    return response.status_code == 404
+    try:
+        spotify.api_request("GET", f"/playlists/{playlist_id}", token)
+    except spotify.SpotifyError as exc:
+        return str(exc).startswith(f"Spotify API HTTP 404 on GET /playlists/{playlist_id}:")
+    return False
 
 
 def archive_missing(db, rows, spotify, token, playlist_id_from_url):
