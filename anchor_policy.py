@@ -200,6 +200,21 @@ def _find_anchor(prompt: str, tracks: list[dict], excluded_tracks=None) -> dict 
     if not prompt_normalized:
         return None
 
+    # Explicit 'song by artist' references outrank fuzzy local title matches.
+    # A title like "The Witch" can appear inside a *different artist name*
+    # ("Frankie and the Witch Fingers") and must not become a false anchor.
+    requested = _prompt_track_request(prompt)
+    if requested:
+        spotify_anchor = _spotify_prompt_anchor(prompt)
+        if spotify_anchor:
+            print(f"[Tune Raider] explicit song anchor resolved: {spotify_anchor['artist']} - {spotify_anchor['title']}", flush=True)
+            return spotify_anchor
+        # Preserve exact reference as a candidate even when Spotify's initial
+        # lookup is unavailable. Spotify resolution will try it normally.
+        print(f"[Tune Raider] explicit song anchor pending Spotify resolution: {requested.artist} - {requested.title}", flush=True)
+        return {"artist": requested.artist, "title": requested.title,
+                "genre": "", "anchor_type": "song", "source": "prompt-anchor"}
+
     artist_mentions = {
         _normalize(track["artist"])
         for track in tracks
