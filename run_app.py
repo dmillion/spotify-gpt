@@ -295,6 +295,14 @@ def _save_refined_playlist(
         elif not track:
             missing.append(f"{track_request.artist} - {track_request.title}")
 
+    from refinement_constraints import excluded_artists, normalized
+    blocked = excluded_artists(instruction, json.loads(source_row["tracks"] or "[]"))
+    if blocked:
+        resolved = [
+            track for track in resolved
+            if not any(normalized(artist.get("name")) in blocked
+                       for artist in track.get("artists") or [])
+        ]
     resolved, _ = enforce_resolved(str(source_row["prompt"]) + "\n" + instruction, resolved)
     if not resolved:
         raise tone_raider.AppError("Spotify could not resolve any tracks for the refined playlist.")
