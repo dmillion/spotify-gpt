@@ -387,7 +387,7 @@ def _refine_playlist(row, instruction: str) -> dict:
     # Preserve length on replacements even when the model underestimates count.
     target_count = max(1, min(int(plan.get("target_count") or len(current)),
                               MAX_REFINEMENT_TRACKS))
-    if not __import__("re").search(r"\\b(?:\\d+|more tracks|fewer tracks|shorter playlist|longer playlist)\\b",
+    if not __import__("re").search(r"\b(?:\d+|more tracks|fewer tracks|shorter playlist|longer playlist)\b",
                                   instruction, __import__("re").I):
         target_count = len(current)
     addition_prompt = str(plan.get("addition_prompt") or "").strip()
@@ -400,8 +400,8 @@ def _refine_playlist(row, instruction: str) -> dict:
         f"{t.get('artist', '')} - {t.get('title', '')}" for t in remaining[:6]
     )
     discovery_prompt = (
-        f"{original_intent}\\n"
-        f"REFINEMENT: {addition_prompt or instruction}\\n"
+        f"{original_intent}\n"
+        f"REFINEMENT: {addition_prompt or instruction}\n"
         f"Find additional, distinct tracks resembling the retained tracks: {kept_examples}. "
         "Respect the original tempo, energy, arrangement progression and style. "
         "Do not add removed artists or repeat existing songs."
@@ -424,7 +424,7 @@ def _refine_playlist(row, instruction: str) -> dict:
         ))
         for attempt in range(2):
             extra_prompt = (
-                discovery_prompt + f"\\nAlternative discovery pass {attempt + 1}: "
+                discovery_prompt + f"\nAlternative discovery pass {attempt + 1}: "
                 "find DIFFERENT artists and recordings; favor the upbeat driving psych "
                 "characteristics of the tracks that were kept."
             )
