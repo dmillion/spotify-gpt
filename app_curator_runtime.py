@@ -40,7 +40,7 @@ def install(ns: dict) -> None:
             if not local_candidates:
                 raise ValueError("No unused library tracks remain for this request.")
             external_candidates = ns["lastfm_external_candidates"](plan, local_candidates, excluded_tracks)
-            external_candidates = external_candidates[:ns["OLLAMA_EXTERNAL_CANDIDATE_LIMIT"]]
+            external_candidates = external_candidates[:max(0, ns["OLLAMA_EXTERNAL_CANDIDATE_LIMIT"] - 12)]
             # Bandcamp is a discovery reference, not a source of downloaded or
             # scraped audio. Only use publicly attributed MusicBrainz metadata.
             bandcamp_candidates = bandcamp_discovery.discover(
