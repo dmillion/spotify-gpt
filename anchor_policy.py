@@ -144,6 +144,11 @@ def _spotify_prompt_anchor(prompt: str) -> dict | None:
         return None
 
     artists = match.get("artists") or []
+    # Never substitute a loosely matching recording for an explicit reference.
+    primary = str((artists[0] if artists else {}).get("name") or "")
+    if _normalize(primary) != _normalize(requested.artist) or _normalize(match.get("name")) != _normalize(requested.title):
+        print(f"[Tune Raider] Spotify anchor rejected mismatched recording: {primary} - {match.get('name')}", flush=True)
+        return None
     artist = str((artists[0] if artists else {}).get("name") or requested.artist).strip()
     title = str(match.get("name") or requested.title).strip()
     if not artist or not title:
