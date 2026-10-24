@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import datetime, timezone
 
 import requests
@@ -189,8 +190,35 @@ def _broaden_sparse_general_result(prompt: str, generated: dict, excluded_tracks
     return generated
 
 
+def _previous_same_prompt_tracks(prompt: str) -> list[str]:
+    """Avoid recycling previous results on repeated near-identical requests."""
+    normalized = lambda value: " ".join(re.findall(r"\\w+", str(value or "").casefold()))
+    wanted = normalized(prompt)
+    if not wanted:
+        return []
+    old = []
+    try:
+        with tone_raider.database() as db:
+            rows = db.execute(
+                "SELECT prompt,tracks FROM generated_playlists ORDER BY id DESC LIMIT 50"
+            ).fetchall()
+        for row in rows:
+            if normalized(row["prompt"]) != wanted:
+                continue
+            for track in json.loads(row["tracks"] or "[]"):
+                if isinstance(track, dict) and track.get("artist") and track.get("title"):
+                    old.append(f"{track['artist']} - {track['title']}")
+    except Exception as exc:
+        print(f"[Tune Raider] prior-playlist repeat check skipped: {exc}", flush=True)
+    return list(dict.fromkeys(old))
+
+
 def ask_for_hybrid_playlist_with_safeguards(prompt: str, excluded_tracks=None) -> dict:
-    generated = _original_ask_for_hybrid_playlist(prompt, excluded_tracks)
+    previous = _previous_same_prompt_tracks(prompt)
+    exclusions = list(dict.fromkeys(list(excluded_tracks or []) + previous))
+    if previous:
+        print(f"[Tune Raider] avoiding {len(previous)} previously selected tracks for this prompt", flush=True)
+    generated = _original_ask_for_hybrid_playlist(prompt, exclusions)
     generated = apply_request_constraints(
         prompt,
         generated,
@@ -200,17 +228,17 @@ def ask_for_hybrid_playlist_with_safeguards(prompt: str, excluded_tracks=None) -
     )
 
     if has_title_constraint(prompt):
-        generated = _supplement_title_query_from_spotify(prompt, generated, excluded_tracks)
+        generated = _supplement_title_query_from_spotify(prompt, generated, exclusions)
     else:
         generated = ensure_prompt_anchor(
             prompt,
             generated,
             tone_raider.AUDIO_DATABASE,
-            excluded_tracks=excluded_tracks,
+            excluded_tracks=exclusions,
             track_limit=tone_raider.PLAYLIST_TRACK_LIMIT,
             artist_limit=tone_raider.PLAYLIST_ARTIST_LIMIT,
         )
-        generated = _broaden_sparse_general_result(prompt, generated, excluded_tracks)
+        generated = _broaden_sparse_general_result(prompt, generated, exclusions)
     # Keep plausible candidates through curation. The strict instrumental check
     # runs after Spotify resolution in app_playlist_runtime.create_from_prompt,
     # when the recording's album and duration are available to LRCLIB.
