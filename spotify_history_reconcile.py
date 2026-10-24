@@ -26,8 +26,10 @@ def complete_owned_snapshot(spotify, token):
         elif total != count:
             raise ValueError("Spotify playlist count changed mid-pagination")
         items = payload["items"]
-        if len(items) != min(50, max(0, total - offset)):
-            raise ValueError("Incomplete Spotify playlist page")
+        if not items and offset < total:
+            raise ValueError(f"Spotify returned an empty page at offset {offset} of {total}")
+        if len(items) > 50 or offset + len(items) > total:
+            raise ValueError("Spotify playlist page exceeds reported total")
         for item in items:
             if not isinstance(item, dict) or not item.get("id"):
                 raise ValueError("Invalid Spotify playlist item")
