@@ -4,6 +4,7 @@ from vocal_policy import guidance
 from lyric_theme import intent as lyrical_intent
 from musical_similarity import emphasis, rank
 from sound_selection import filter_selection
+import bandcamp_discovery
 import json
 import sqlite3
 
@@ -40,6 +41,21 @@ def install(ns: dict) -> None:
                 raise ValueError("No unused library tracks remain for this request.")
             external_candidates = ns["lastfm_external_candidates"](plan, local_candidates, excluded_tracks)
             external_candidates = external_candidates[:ns["OLLAMA_EXTERNAL_CANDIDATE_LIMIT"]]
+            # Bandcamp is a discovery reference, not a source of downloaded or
+            # scraped audio. Only use publicly attributed MusicBrainz metadata.
+            bandcamp_candidates = bandcamp_discovery.discover(
+                plan.get("artists", []), excluded_tracks or [], limit=12,
+            )
+            existing = {(str(c.get("artist") or "").casefold(),
+                         str(c.get("title") or "").casefold())
+                        for c in external_candidates}
+            for candidate in bandcamp_candidates:
+                key = (candidate["artist"].casefold(), candidate["title"].casefold())
+                if key not in existing:
+                    external_candidates.append(candidate)
+                    existing.add(key)
+            external_candidates = external_candidates[:ns["OLLAMA_EXTERNAL_CANDIDATE_LIMIT"]]
+            print(f"[Tune Raider] Bandcamp references: {len(bandcamp_candidates)} MusicBrainz recording leads", flush=True)
             candidate_map = {}; model_candidates = []
             for row in local_candidates:
                 cid = f"local:{row['id']}"
