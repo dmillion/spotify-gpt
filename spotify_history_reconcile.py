@@ -60,16 +60,20 @@ def archive_missing(db, rows, spotify, token, playlist_id_from_url):
         "(original_id INTEGER PRIMARY KEY, playlist_id TEXT, archived_at TEXT NOT NULL, "
         "row_data TEXT NOT NULL)"
     )
+    absent = [
+        row for row in rows
+        if (playlist_id_from_url(row["spotify_url"])
+            and playlist_id_from_url(row["spotify_url"]) not in available)
+    ]
+    if not absent:
+        return 0
+    # Removing a playlist from Spotify's library need not make its URL 404.
+    # Require a second complete, consistent listing before archiving anything.
+    confirmed_available = complete_owned_snapshot(spotify, token)
     removed = 0
-    for row in rows:
+    for row in absent:
         playlist_id = playlist_id_from_url(row["spotify_url"])
-        if not playlist_id or playlist_id in available:
-            continue
-        try:
-            if not confirm_missing(spotify, token, playlist_id):
-                continue
-        except Exception as exc:
-            print(f"[Tune Raider] Spotify removal check inconclusive for {playlist_id}: {exc}", flush=True)
+        if not playlist_id or playlist_id in confirmed_available:
             continue
         full = db.execute("SELECT * FROM generated_playlists WHERE id=?", (row["id"],)).fetchone()
         if full is None:
