@@ -32,7 +32,7 @@ class SpotifyHistoryReconcileTests(unittest.TestCase):
             raise AssertionError(path)
         spotify.SpotifyError = type("SpotifyError", (Exception,), {})
         spotify.api_request.side_effect = request
-        rows = self.db.execute("SELECT id, spotify_url FROM generated_playlists").fetchall()
+        rows = self.db.execute("SELECT id, name, spotify_url FROM generated_playlists").fetchall()
         with self.db:
             removed = reconcile.archive_missing(
                 self.db, rows, spotify, "token",
@@ -47,7 +47,7 @@ class SpotifyHistoryReconcileTests(unittest.TestCase):
     def test_incomplete_snapshot_does_not_remove_anything(self):
         spotify = Mock()
         spotify.api_request.return_value = Mock(
-            status_code=200, json=lambda: {"total": 2, "items": [{"id": "present456"}]}
+            status_code=200, json=lambda: {"total": 2, "items": [{"id": "present456", "name": "Psych Rock Progression"}]}
         )
         with self.assertRaises(ValueError):
             reconcile.archive_missing(
