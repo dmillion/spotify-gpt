@@ -65,11 +65,18 @@ def archive_missing(db, rows, spotify, token, playlist_id_from_url):
         if (playlist_id_from_url(row["spotify_url"])
             and playlist_id_from_url(row["spotify_url"]) not in available)
     ]
+    print(f"[Tune Raider] history inventory: Spotify lists {len(available)} playlists; "
+          f"{len(rows)} local linked rows; {len(absent)} missing IDs", flush=True)
     if not absent:
         return 0
     # Removing a playlist from Spotify's library need not make its URL 404.
     # Require a second complete, consistent listing before archiving anything.
     confirmed_available = complete_owned_snapshot(spotify, token)
+    if confirmed_available != available:
+        raise ValueError("Spotify playlist IDs changed between checks; refusing to archive")
+    # Guard against another mass-deletion incident, even on a valid-looking snapshot.
+    if len(absent) > 3:
+        raise ValueError(f"{len(absent)} playlists appear missing; refusing bulk archive (limit 3 per sync)")
     removed = 0
     for row in absent:
         playlist_id = playlist_id_from_url(row["spotify_url"])
