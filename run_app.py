@@ -15,6 +15,7 @@ from anchor_policy import ensure_prompt_anchor
 from vocal_policy import requires_instrumental, enforce_resolved
 from intent_policy import apply_request_constraints, has_title_constraint, title_constraint
 from spotify_discovery import search_broad_context
+from refinement_constraints import filter_removed, normalized
 
 
 MIN_PLAYLIST_TRACKS = max(1, int(os.environ.get("MIN_PLAYLIST_TRACKS", "10")))
@@ -340,9 +341,11 @@ def _save_refined_playlist(
 
 
 def _refine_playlist(row, instruction: str) -> dict:
-    current = json.loads(row["source_tracks"]) or json.loads(row["tracks"])
+    # source_tracks is the entire discovery pool, not the published playlist.
+    # Refine exactly what the user saw and listened to.
+    current = json.loads(row["tracks"] or "[]")
     if not current:
-        raise tone_raider.AppError("That history item has no tracks to refine.")
+        raise tone_raider.AppError("That history item has no published tracks to refine.")
 
     numbered = [
         {"index": index, "artist": track.get("artist", ""), "title": track.get("title", "")}
@@ -351,8 +354,9 @@ def _refine_playlist(row, instruction: str) -> dict:
     plan = tone_raider.model_json(
         "Revise an existing playlist according to the user's edit request. "
         "Return remove_indexes only for tracks the request clearly asks to remove or replace. "
-        "Use addition_prompt to describe tracks that should be discovered and added; leave it empty when no additions are needed. "
-        "target_count is the desired final number of tracks: preserve the current count unless the user explicitly asks to add/remove a quantity or otherwise change the size. "
+        "Use addition_prompt to describe tracks that should be discovered and added. "
+        "Unless a new count is explicitly requested, keep the original playlist size. "
+        "Never reintroduce any removed artist or track. "
         "Preserve unaffected tracks and their order. Create a concise revised playlist name and one-sentence description. "
         "Existing playlist: " + json.dumps({
             "name": row["name"],
@@ -367,32 +371,78 @@ def _refine_playlist(row, instruction: str) -> dict:
 
     remove_indexes = {
         int(value) for value in plan.get("remove_indexes", [])
-        if isinstance(value, int) and 1 <= value <= len(current)
+        if type(value) is int and 1 <= value <= len(current)
     }
-    remaining = [track for index, track in enumerate(current, 1) if index not in remove_indexes]
-    target_count = max(1, min(int(plan.get("target_count") or len(remaining) or 1), MAX_REFINEMENT_TRACKS))
+    remaining, _, removed, blocked = filter_removed(
+        instruction, current, model_indexes=remove_indexes,
+    )
+    # Preserve length on replacements even when the model underestimates count.
+    target_count = max(1, min(int(plan.get("target_count") or len(current)),
+                              MAX_REFINEMENT_TRACKS))
+    if not __import__("re").search(r"\\b(?:\\d+|more tracks|fewer tracks|shorter playlist|longer playlist)\\b",
+                                  instruction, __import__("re").I):
+        target_count = len(current)
     addition_prompt = str(plan.get("addition_prompt") or "").strip()
+    original_intent = str(row["prompt"] or "").split(" || Refine ", 1)[0]
+    if original_intent.startswith("Original intent: "):
+        original_intent = original_intent[len("Original intent: "):]
+    # Explicitly keep the source style and the retained tracks as the basis
+    # for discovery, without passing any removed names as positive examples.
+    kept_examples = ", ".join(
+        f"{t.get('artist', '')} - {t.get('title', '')}" for t in remaining[:6]
+    )
+    discovery_prompt = (
+        f"{original_intent}\\n"
+        f"REFINEMENT: {addition_prompt or instruction}\\n"
+        f"Find additional, distinct tracks resembling the retained tracks: {kept_examples}. "
+        "Respect the original tempo, energy, arrangement progression and style. "
+        "Do not add removed artists or repeat existing songs."
+    )
+    exclusions = [
+        f"{t.get('artist', '')} - {t.get('title', '')}" for t in current
+    ]
+    print(f"[Tune Raider] refinement: {len(current)} published songs, "
+          f"{len(removed)} removed, {len(remaining)} retained, "
+          f"{target_count} target, blocked artists={sorted(blocked)}", flush=True)
 
     additions = []
-    if addition_prompt or target_count > len(remaining):
-        discovery_prompt = addition_prompt or instruction
-        excluded = [f"{track.get('artist', '')} - {track.get('title', '')}" for track in current]
-        generated = tone_raider.ask_for_hybrid_playlist(discovery_prompt, excluded)
-        additions = list(generated.get("tracks") or [])
-
+    if target_count > len(remaining):
+        generated = tone_raider.ask_for_hybrid_playlist(discovery_prompt, exclusions)
+        _, additions, _, _ = filter_removed(instruction, current, additions)
     final_tracks = _merge_tracks(remaining, additions, target_count)
-    if len(final_tracks) < target_count and additions:
-        excluded = [f"{track.get('artist', '')} - {track.get('title', '')}" for track in final_tracks]
-        broad = _original_ask_for_hybrid_playlist(
-            f"{addition_prompt or instruction}\nBroaden this slightly with musically adjacent choices to fill the remaining playlist slots.",
-            excluded,
-        )
-        final_tracks = _merge_tracks(final_tracks, list(broad.get("tracks") or []), target_count)
+    if len(final_tracks) < target_count:
+        expanded_exclusions = list(dict.fromkeys(
+            exclusions + [f"{t['artist']} - {t['title']}" for t in final_tracks]
+        ))
+        for attempt in range(2):
+            extra_prompt = (
+                discovery_prompt + f"\\nAlternative discovery pass {attempt + 1}: "
+                "find DIFFERENT artists and recordings; favor the upbeat driving psych "
+                "characteristics of the tracks that were kept."
+            )
+            try:
+                broad = tone_raider.ask_for_hybrid_playlist(extra_prompt, expanded_exclusions)
+            except Exception as exc:
+                print(f"[Tune Raider] refinement discovery retry failed: {exc}", flush=True)
+                continue
+            _, candidates, _, _ = filter_removed(
+                instruction, current, broad.get("tracks") or [],
+            )
+            final_tracks = _merge_tracks(final_tracks, candidates, target_count)
+            expanded_exclusions.extend(
+                f"{t['artist']} - {t['title']}" for t in final_tracks
+            )
+            if len(final_tracks) >= target_count:
+                break
+
+    # Enforce user exclusions one last time immediately before Spotify writes.
+    _, final_tracks, _, _ = filter_removed(instruction, current, final_tracks)
+    if not final_tracks:
+        raise tone_raider.AppError("Refinement found no tracks satisfying the requested removals.")
 
     name = str(plan.get("name") or f"{row['name']} · Refined").strip()
     description = str(plan.get("description") or row["description"] or tone_raider.spotify.DEFAULT_DESCRIPTION).strip()
     return _save_refined_playlist(row, instruction, final_tracks, name, description, target_count)
-
 
 @tone_raider.app.post("/api/history/<int:playlist_id>/refine")
 def refine_history_item(playlist_id: int):
