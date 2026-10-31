@@ -8,6 +8,7 @@ new external music rather than recycle whatever happens to be indexed locally.
 from __future__ import annotations
 
 from contextvars import ContextVar
+import random
 
 import requests
 
@@ -125,6 +126,8 @@ def _direct_similarity_candidates(anchor: str, excluded_tracks=None, *, limit: i
     seen = set(excluded)
     result: list[dict] = []
     anchor_styles = _anchor_style_profile(anchor)
+    rng = random.SystemRandom()
+    artist_counts: dict[str, int] = {}
 
     def add(artist: str, title: str, relationship: str, match: float | None = None, style_overlap=None) -> None:
         artist = str(artist or "").strip()
@@ -132,7 +135,12 @@ def _direct_similarity_candidates(anchor: str, excluded_tracks=None, *, limit: i
         key = (_normalize(artist), _normalize(title))
         if not key[0] or not key[1] or key in seen or len(result) >= limit:
             return
+        # One discovery candidate per artist per pass; reference songs are
+        # injected separately by anchor_policy and do not consume this budget.
+        if artist_counts.get(key[0], 0) >= 1:
+            return
         seen.add(key)
+        artist_counts[key[0]] = artist_counts.get(key[0], 0) + 1
         row = {
             "artist": artist,
             "title": title,
@@ -149,11 +157,9 @@ def _direct_similarity_candidates(anchor: str, excluded_tracks=None, *, limit: i
         result.append(row)
 
     try:
-        for title in lastfm.top_tracks(anchor, limit=2):
-            add(anchor, title, f"track by prompt anchor {anchor}", style_overlap=anchor_styles[:6])
-
+        # Do not spend discovery slots on the reference artist's hits.
         ranked_neighbors = []
-        for neighbor in lastfm.similar_artists(anchor, limit=24):
+        for neighbor in lastfm.similar_artists(anchor, limit=60):
             match = float(neighbor.get("match") or 0)
             if match < 0.10:
                 continue
@@ -168,12 +174,23 @@ def _direct_similarity_candidates(anchor: str, excluded_tracks=None, *, limit: i
             combined = match + style_score
             ranked_neighbors.append((combined, match, name, overlap))
 
+        # Shuffle within similarity bands to avoid always retrieving the same
+        # few popular neighbors while retaining broad stylistic relevance.
         ranked_neighbors.sort(key=lambda row: row[0], reverse=True)
-        for _combined, match, name, overlap in ranked_neighbors:
+        neighbors = []
+        for index in range(0, len(ranked_neighbors), 8):
+            band = ranked_neighbors[index:index + 8]
+            rng.shuffle(band)
+            neighbors.extend(band)
+        for _combined, match, name, overlap in neighbors:
             relationship = f"style-matched neighbor of {anchor}"
             if overlap:
                 relationship += f"; shared styles: {', '.join(overlap[:4])}"
-            for title in lastfm.top_tracks(name, limit=3):
+            titles = list(lastfm.top_tracks(name, limit=15))
+            # Sample beyond top-three hits; the Last.fm API remains popularity
+            # biased, but successive requests can explore deeper recordings.
+            rng.shuffle(titles)
+            for title in titles:
                 add(name, title, relationship, match, overlap)
                 if len(result) >= limit:
                     break
@@ -192,7 +209,7 @@ def external_candidates_with_prompt_anchor(plan: dict, local_candidates: list[di
     if not anchor or budget == 0:
         return existing
 
-    direct_budget = min(28, max(12, int(round(budget * 0.75))))
+    direct_budget = min(28, max(8, int(round(budget * 0.50))))
     direct = _direct_similarity_candidates(anchor, excluded_tracks, limit=direct_budget)
     if not direct:
         return existing
