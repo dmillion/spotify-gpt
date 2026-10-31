@@ -55,44 +55,40 @@ def _excluded_keys(excluded_tracks) -> set[tuple[str, str]]:
 
 
 def _prompt_track_requests(prompt: str) -> list[spotify.TrackRequest]:
-    """Parse one or more quoted song references sharing a BY artist clause."""
+    """Extract quoted track references sharing an explicit BY artist clause."""
     text = " ".join(str(prompt or "").split())
-    if not text:
-        return []
-    # Quote pairs are recognized independently of apostrophes within titles.
-    quoted = r"(?P<quote>[\\\"'“‘])(?P<title>.+?)(?:[\\\"'”’])"
     clause = re.search(
-        r"(?:songs?|tracks?|music)\\s+(?:more\\s+)?like\\s+(?P<titles>.+?)\\s+by\\s+"
-        r"(?P<artist>.+?)(?=\\s*[,;.]|\\s+\\b(?:long|fast|heavy|abrasive|with|that|which|where|but|prefer|avoid)\\b|$)",
+        r"(?:songs?|tracks?|music)\s+(?:more\s+)?like\s+(?P<titles>.+?)\s+by\s+"
+        r"(?P<artist>.+?)(?=\s*[,;.]|\s+\b(?:long|fast|heavy|abrasive|with|that|which|where|but|prefer|avoid)\b|$)",
         text, flags=re.IGNORECASE,
     )
     if not clause:
         return []
-    artist = clause.group("artist").strip(" \\\"'“”‘’")
-    titles_text = clause.group("titles")
-    titles = [m.group("title").strip() for m in re.finditer(quoted, titles_text)]
-    # Reject malformed partial quote captures instead of treating an entire
-    # multi-track phrase as a single track or artist.
+    artist = clause.group("artist").strip(" \"'“”‘’")
+    titles = [
+        match.group("title").strip()
+        for match in re.finditer(r"(?P<quote>['\"“‘])(?P<title>.+?)(?P=quote)", clause.group("titles"))
+    ]
     if not titles or not artist or len(artist) > 120:
         return []
     return [spotify.TrackRequest(artist=artist, title=title) for title in titles if title]
 
 
 def _prompt_track_request(prompt: str) -> spotify.TrackRequest | None:
-    """Backward-compatible single-reference accessor."""
+    """Backward-compatible accessor for a single inspiration reference."""
     references = _prompt_track_requests(prompt)
     if references:
         return references[0]
     text = " ".join(str(prompt or "").split())
     match = re.search(
-        r"(?:like|similar\\s+to|based\\s+on|inspired\\s+by)\\s+"
-        r"(?P<title>.+?)\\s+by\\s+(?P<artist>.+?)(?=[,;.]|$)",
+        r"(?:like|similar\s+to|based\s+on|inspired\s+by)\s+"
+        r"(?P<title>.+?)\s+by\s+(?P<artist>.+?)(?=[,;.]|$)",
         text, flags=re.IGNORECASE,
     )
     if not match:
         return None
-    title = match.group("title").strip(" \\\"'“”‘’")
-    artist = match.group("artist").strip(" \\\"'“”‘’")
+    title = match.group("title").strip(" \"'“”‘’")
+    artist = match.group("artist").strip(" \"'“”‘’")
     if not title or not artist or len(title) > 120 or len(artist) > 120:
         return None
     return spotify.TrackRequest(artist=artist, title=title)
