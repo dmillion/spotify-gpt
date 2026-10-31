@@ -100,6 +100,9 @@ def _prompt_artist_name(prompt: str) -> str | None:
     The result is only a candidate. Spotify must still confirm an exact artist
     match before Tune Raider inserts one of that artist's tracks.
     """
+    references = _prompt_track_requests(prompt)
+    if references:
+        return references[0].artist
     text = " ".join(str(prompt or "").split())
     if not text:
         return None
