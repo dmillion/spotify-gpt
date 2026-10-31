@@ -6,6 +6,7 @@ import instrumental_discovery
 import lyric_theme
 import lrclib_client
 import spotify_history_reconcile
+import discovery_novelty
 from playlist_prompt_metadata import spotify_description
 
 import json
@@ -72,6 +73,14 @@ def install(ns: dict) -> None:
         except Exception as exc:
             print("[Tune Raider] CURATION EXCEPTION TRACEBACK:\n" + traceback.format_exc(), flush=True)
             _stage_error("curation", "Playlist curation failed", exc)
+
+        if not requires_instrumental(prompt):
+            try:
+                with ns["database"]() as connection:
+                    generated = discovery_novelty.curate(prompt, generated, connection)
+            except Exception as exc:
+                # History must never prevent playlist creation.
+                print(f"[Tune Raider] novelty history unavailable: {exc}", flush=True)
 
         stage("spotify_auth")
         try:
