@@ -54,26 +54,48 @@ def _excluded_keys(excluded_tracks) -> set[tuple[str, str]]:
     return result
 
 
-def _prompt_track_request(prompt: str) -> spotify.TrackRequest | None:
-    """Extract common explicit `track by artist` inspiration phrasing."""
+def _prompt_track_requests(prompt: str) -> list[spotify.TrackRequest]:
+    """Parse one or more quoted song references sharing a BY artist clause."""
     text = " ".join(str(prompt or "").split())
     if not text:
-        return None
+        return []
+    # Quote pairs are recognized independently of apostrophes within titles.
+    quoted = r"(?P<quote>[\\\"'“‘])(?P<title>.+?)(?:[\\\"'”’])"
+    clause = re.search(
+        r"(?:songs?|tracks?|music)\\s+(?:more\\s+)?like\\s+(?P<titles>.+?)\\s+by\\s+"
+        r"(?P<artist>.+?)(?=\\s*[,;.]|\\s+\\b(?:long|fast|heavy|abrasive|with|that|which|where|but|prefer|avoid)\\b|$)",
+        text, flags=re.IGNORECASE,
+    )
+    if not clause:
+        return []
+    artist = clause.group("artist").strip(" \\\"'“”‘’")
+    titles_text = clause.group("titles")
+    titles = [m.group("title").strip() for m in re.finditer(quoted, titles_text)]
+    # Reject malformed partial quote captures instead of treating an entire
+    # multi-track phrase as a single track or artist.
+    if not titles or not artist or len(artist) > 120:
+        return []
+    return [spotify.TrackRequest(artist=artist, title=title) for title in titles if title]
 
-    patterns = [
-        r"(?:songs?|tracks?|music)\s+like\s+[\"']?(?P<title>.+?)[\"']?\s+by\s+(?P<artist>.+?)(?=\s+(?:where|with|that|which|because|but|and\s+there|and\s+it)\b|[,.;]|$)",
-        r"(?:like|similar\s+to|based\s+on|inspired\s+by)\s+[\"']?(?P<title>.+?)[\"']?\s+by\s+(?P<artist>.+?)(?=\s+(?:where|with|that|which|because|but|and\s+there|and\s+it)\b|[,.;]|$)",
-        r"[\"']?(?P<title>[A-Z0-9][^,;]{1,80}?)[\"']?\s+by\s+(?P<artist>[A-Z0-9][^,;]{1,80}?)(?=\s+(?:where|with|that|which|because|but)\b|[,.;]|$)",
-    ]
-    for pattern in patterns:
-        match = re.search(pattern, text, flags=re.IGNORECASE)
-        if not match:
-            continue
-        title = match.group("title").strip(" \"'“”‘’")
-        artist = match.group("artist").strip(" \"'“”‘’")
-        if title and artist and len(title) <= 120 and len(artist) <= 120:
-            return spotify.TrackRequest(artist=artist, title=title)
-    return None
+
+def _prompt_track_request(prompt: str) -> spotify.TrackRequest | None:
+    """Backward-compatible single-reference accessor."""
+    references = _prompt_track_requests(prompt)
+    if references:
+        return references[0]
+    text = " ".join(str(prompt or "").split())
+    match = re.search(
+        r"(?:like|similar\\s+to|based\\s+on|inspired\\s+by)\\s+"
+        r"(?P<title>.+?)\\s+by\\s+(?P<artist>.+?)(?=[,;.]|$)",
+        text, flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+    title = match.group("title").strip(" \\\"'“”‘’")
+    artist = match.group("artist").strip(" \\\"'“”‘’")
+    if not title or not artist or len(title) > 120 or len(artist) > 120:
+        return None
+    return spotify.TrackRequest(artist=artist, title=title)
 
 
 def _prompt_artist_name(prompt: str) -> str | None:
@@ -342,6 +364,11 @@ def ensure_prompt_anchor(
 ) -> dict:
     """Guarantee a resolvable prompt inspiration survives curation when possible."""
     tracks = _load_tracks(database_path)
+    # Inspiration songs describe the target sound; they are not mandatory
+    # playlist entries. Preserve the original anchor behavior for artist-only
+    # requests until the broader discovery revision is ready.
+    if _prompt_track_requests(prompt):
+        return _ground_description(generated, tracks, prompt)
     anchor = _find_anchor(prompt, tracks, excluded_tracks)
     selected = list(generated.get("tracks") or [])
 
