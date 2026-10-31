@@ -363,11 +363,31 @@ def ensure_prompt_anchor(
 ) -> dict:
     """Guarantee a resolvable prompt inspiration survives curation when possible."""
     tracks = _load_tracks(database_path)
-    # Inspiration songs describe the target sound; they are not mandatory
-    # playlist entries. Preserve the original anchor behavior for artist-only
-    # requests until the broader discovery revision is ready.
-    if _prompt_track_requests(prompt):
-        return _ground_description(generated, tracks, prompt)
+    references = _prompt_track_requests(prompt)
+    if references:
+        # Explicit references are required even if excluded by novelty history.
+        # Remove other tracks by the reference artist first, preserving the
+        # requested songs and leaving the remaining slots for discovery.
+        keys = {(_normalize(ref.artist), _normalize(ref.title)) for ref in references}
+        artists = {_normalize(ref.artist) for ref in references}
+        selected = [
+            track for track in (generated.get("tracks") or [])
+            if _normalize(track.get("artist")) not in artists
+            and (_normalize(track.get("artist")), _normalize(track.get("title"))) not in keys
+        ]
+        anchors = []
+        for ref in references:
+            key = (_normalize(ref.artist), _normalize(ref.title))
+            if any((_normalize(item["artist"]), _normalize(item["title"])) == key for item in anchors):
+                continue
+            anchors.append({"artist": ref.artist, "title": ref.title, "source": "prompt-anchor"})
+        generated["tracks"] = (anchors + selected)[:max(len(anchors), track_limit)]
+        generated["description"] = (
+            "Built around " + ", ".join(ref.title for ref in references)
+            + " by " + references[0].artist
+            + "; exploring related artists while prioritizing the requested musical characteristics."
+        )
+        return generated
     anchor = _find_anchor(prompt, tracks, excluded_tracks)
     selected = list(generated.get("tracks") or [])
 
