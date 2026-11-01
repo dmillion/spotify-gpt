@@ -7,6 +7,7 @@ import lyric_theme
 import lrclib_client
 import spotify_history_reconcile
 import discovery_novelty
+import sonic_ranking
 from playlist_prompt_metadata import spotify_description
 
 import json
@@ -257,6 +258,9 @@ def install(ns: dict) -> None:
                   flush=True)
             resolved = balanced
         else:
+            if sonic_ranking.intent(prompt) and any(sonic_ranking.intent(prompt).values()):
+                stage("sonic_ranking")
+                resolved = sonic_ranking.rank(prompt, resolved)
             resolved = resolved[:ns["PLAYLIST_TRACK_LIMIT"]]
         generated["tracks"] = all_candidates
         if strict:
