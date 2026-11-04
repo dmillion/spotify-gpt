@@ -13,6 +13,7 @@ import os
 from collections import Counter
 
 import discovery_novelty
+import discovery_track_fit
 from anchor_policy import _prompt_track_requests
 
 import requests
@@ -172,19 +173,42 @@ def _novelty_order(candidates, prompt, *, limit):
         style = len(row.get("style_overlap") or [])
         # Exact recording repeats are penalized more than repeated artists.
         # A strong match can still win when fresh candidates are weak.
-        score = (match * 30 + min(style, 4) * 6
+        # Artist-level similarity is only a discovery lead, not track-level fit.
+        score = (match * 16 + min(style, 4) * 3
                  - track_counts[key] * track_penalty
                  - min(artist_counts[key[0]], 12) * artist_penalty
                  + rng.uniform(0, 1.5))
+        # Explicit reference-track neighbors carry stronger song-level evidence.
+        if str(row.get("relationship") or "").startswith("track neighbor of "):
+            score += 13
         ranked.append((score, index, row))
     ranked.sort(key=lambda item: (-item[0], item[1]))
+    # Request track tags only for the strongest leads, not every discovered song.
+    # This limits added Last.fm requests and prevents an unbounded latency increase.
+    if any(discovery_track_fit.sonic_ranking.intent(prompt).values()):
+        reranked = []
+        for position, (score, index, row) in enumerate(ranked):
+            evidence = {}
+            if position < 32:
+                delta, evidence = discovery_track_fit.adjustment(
+                    prompt, row.get("artist", ""), row.get("title", ""))
+                score += delta
+            if evidence:
+                row = dict(row)
+                row["track_fit_evidence"] = evidence
+            reranked.append((score, index, row))
+        ranked = sorted(reranked, key=lambda item: (-item[0], item[1]))
     output = []
     artist_usage = Counter()
+    soft_limit = 2
+    hard_limit = 5
     for _, _, row in ranked:
         artist = discovery_novelty.artist_key(row.get("artist"))
-        if artist_usage[artist] >= 2:
+        if artist_usage[artist] >= hard_limit:
             rejected["artist_cap"] += 1
             continue
+        if artist_usage[artist] >= soft_limit:
+            rejected["soft_artist_penalty"] += 1
         artist_usage[artist] += 1
         output.append(row)
         if len(output) >= limit:
