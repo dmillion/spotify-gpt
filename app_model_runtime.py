@@ -81,6 +81,11 @@ def install(ns: dict) -> None:
                 "think": ns["OLLAMA_THINK"],
                 "format": schema,
                 "options": {"temperature": 0},
+                # "options": {
+                #     "temperature": 0,
+                #     "num_ctx": 8192,
+                #     "num_batch": 256,
+                # },
                 "messages": [
                     {"role": "system", "content": instructions + " Return only data matching the requested JSON schema."},
                     {"role": "user", "content": prompt},

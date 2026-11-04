@@ -40,8 +40,15 @@ class DiscoveryStep3Tests(unittest.TestCase):
         ]
         with patch.object(discovery, "_history", return_value=(Counter(), Counter())):
             selected = discovery._novelty_order(rows, "heavy psych rock", limit=10)
-        self.assertEqual([(r["artist"], r["title"]) for r in selected],
-                         [("A", "One"), ("A", "Two"), ("B", "Four")])
+        self.assertEqual(
+            [(r["artist"], r["title"]) for r in selected],
+            [
+                ("A", "One"),
+                ("A", "Two"),
+                ("B", "Four"),
+                ("A", "Three"),
+            ],
+        )
 
     def test_reference_tracks_not_consumed_from_discovery_budget(self):
         from collections import Counter
