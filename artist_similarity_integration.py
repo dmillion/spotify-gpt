@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from contextvars import ContextVar
 import random
+import os
 from collections import Counter
 
 import discovery_novelty
@@ -123,6 +124,10 @@ def enrich_library_plan_with_anchor_styles(plan: dict, library) -> dict:
     return enriched
 
 
+def _debug():
+    return os.environ.get("DISCOVERY_DEBUG", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _history():
     """Historical selections inform novelty, without excluding viable recordings."""
     try:
@@ -144,6 +149,7 @@ def _novelty_order(candidates, prompt, *, limit):
             for ref in _prompt_track_requests(prompt)}
     seen = set()
     ranked = []
+    rejected = Counter()
     # Broad genre prompts need stronger artist rotation; explicit song references
     # should prioritize sonic proximity without locking into the same recordings.
     broad = not refs
@@ -152,10 +158,15 @@ def _novelty_order(candidates, prompt, *, limit):
     rng = random.SystemRandom()
     for index, row in enumerate(candidates):
         key = discovery_novelty.track_key(row)
-        if not all(key) or key in seen:
+        if not all(key):
+            rejected["invalid"] += 1
+            continue
+        if key in seen:
+            rejected["duplicate"] += 1
             continue
         seen.add(key)
         if key in refs:
+            rejected["reference"] += 1
             continue  # Anchor policy adds mandatory references separately.
         match = max(0.0, min(1.0, float(row.get("match") or 0.0)))
         style = len(row.get("style_overlap") or [])
@@ -172,6 +183,7 @@ def _novelty_order(candidates, prompt, *, limit):
     for _, _, row in ranked:
         artist = discovery_novelty.artist_key(row.get("artist"))
         if artist_usage[artist] >= 2:
+            rejected["artist_cap"] += 1
             continue
         artist_usage[artist] += 1
         output.append(row)
@@ -180,6 +192,20 @@ def _novelty_order(candidates, prompt, *, limit):
     print(f"[Tune Raider] discovery novelty: {len(candidates)} candidates -> "
           f"{len(output)}; {sum(track_counts[discovery_novelty.track_key(t)] > 0 for t in output)} historical repeats",
           flush=True)
+    if _debug():
+        print(f"[Tune Raider] discovery funnel: scored={len(ranked)} selected={len(output)} "
+              f"budget={limit} rejected={dict(rejected)}", flush=True)
+        chosen = {discovery_novelty.track_key(row) for row in output}
+        for score_value, _, row in ranked[:12]:
+            key = discovery_novelty.track_key(row)
+            print(f"[Tune Raider] discovery ranked: {row.get('artist')} / {row.get('title')} "
+                  f"score={score_value:.1f} match={row.get('match', 0)} "
+                  f"history={track_counts[key]} artist_history={artist_counts[key[0]]} "
+                  f"selected={key in chosen}", flush=True)
+        missed = [row for _, _, row in ranked if discovery_novelty.track_key(row) not in chosen]
+        for row in missed[:12]:
+            print(f"[Tune Raider] discovery missed: {row.get('artist')} / {row.get('title')} "
+                  f"reason=artist_cap_or_budget", flush=True)
     return output
 
 
@@ -197,16 +223,26 @@ def _direct_similarity_candidates(anchor: str, excluded_tracks=None, *, limit: i
     anchor_styles = _anchor_style_profile(anchor)
     rng = random.SystemRandom()
     max_pool = min(100, max(limit * 3, 40))
+    stats = Counter()
 
     def add(artist, title, relationship, match=0.0, overlap=None):
         artist = str(artist or "").strip()
         title = str(title or "").strip()
         key = (_normalize(artist), _normalize(title))
-        if not all(key) or key in seen or len(pool) >= max_pool:
+        if not all(key):
+            stats["invalid"] += 1
+            return
+        if key in seen:
+            stats["duplicate_or_excluded"] += 1
+            return
+        if len(pool) >= max_pool:
+            stats["pool_full"] += 1
             return
         if _normalize(artist) == _normalize(anchor):
+            stats["anchor_artist"] += 1
             return
         seen.add(key)
+        stats["pooled"] += 1
         pool.append({
             "artist": artist, "title": title, "source": "lastfm",
             "relationship": relationship, "anchor_artist": anchor,
@@ -221,9 +257,11 @@ def _direct_similarity_candidates(anchor: str, excluded_tracks=None, *, limit: i
                 artist = str(item.get("artist") or "")
                 match = float(item.get("match") or 0)
                 if match < 0.12:
+                    stats["track_low_similarity"] += 1
                     continue
                 style_score, overlap = _neighbor_style_score(anchor_styles, artist)
                 if anchor_styles and not (style_score > 0 or match >= 0.65):
+                    stats["track_style_rejected"] += 1
                     continue
                 add(artist, item.get("title"), f"track neighbor of {ref.title}",
                     match, overlap)
@@ -235,6 +273,7 @@ def _direct_similarity_candidates(anchor: str, excluded_tracks=None, *, limit: i
         for neighbor in lastfm.similar_artists(anchor, limit=50):
             match = float(neighbor.get("match") or 0)
             if match < 0.10:
+                stats["artist_low_similarity"] += 1
                 continue
             name = str(neighbor.get("name") or "").strip()
             if not name:
@@ -242,8 +281,10 @@ def _direct_similarity_candidates(anchor: str, excluded_tracks=None, *, limit: i
             style_score, overlap = _neighbor_style_score(anchor_styles, name)
             specific = [tag for tag in overlap if _style_key(tag) not in _GENERIC_STYLE_TAGS]
             if anchor_styles and not (specific or len(overlap) >= 2 or match >= 0.65):
+                stats["artist_style_rejected"] += 1
                 continue
             ranked_neighbors.append((match + style_score, match, name, overlap))
+            stats["eligible_artists"] += 1
         ranked_neighbors.sort(key=lambda row: row[0], reverse=True)
         neighbors = []
         for index in range(0, len(ranked_neighbors), 8):
@@ -258,12 +299,16 @@ def _direct_similarity_candidates(anchor: str, excluded_tracks=None, *, limit: i
                 titles = list(lastfm.top_tracks(name, limit=15))
             except (requests.RequestException, RuntimeError, ValueError):
                 continue
+            stats["queried_artists"] += 1
             rng.shuffle(titles)
             for title in titles[:3]:
                 add(name, title, f"style-matched neighbor of {anchor}", match, overlap)
     except (requests.RequestException, RuntimeError, ValueError) as exc:
         print(f"[Tune Raider] artist-neighbor discovery unavailable: {exc}", flush=True)
 
+    if _debug():
+        print(f"[Tune Raider] discovery source funnel: pool={len(pool)}/{max_pool} "
+              f"counters={dict(stats)}", flush=True)
     return _novelty_order(pool, prompt, limit=limit)
 
 
