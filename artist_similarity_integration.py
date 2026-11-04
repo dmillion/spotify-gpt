@@ -193,24 +193,31 @@ def _novelty_order(candidates, prompt, *, limit):
                 delta, evidence = discovery_track_fit.adjustment(
                     prompt, row.get("artist", ""), row.get("title", ""))
                 score += delta
-            if evidence:
-                row = dict(row)
-                row["track_fit_evidence"] = evidence
+            if evidence and _debug():
+                print(f"[Tune Raider] discovery track fit: {row.get('artist')} / "
+                      f"{row.get('title')} adjustment={delta:+.1f} evidence={evidence}", flush=True)
             reranked.append((score, index, row))
         ranked = sorted(reranked, key=lambda item: (-item[0], item[1]))
     output = []
     artist_usage = Counter()
-    soft_limit = 2
-    hard_limit = 5
-    for _, _, row in ranked:
-        artist = discovery_novelty.artist_key(row.get("artist"))
-        if artist_usage[artist] >= hard_limit:
-            rejected["artist_cap"] += 1
-            continue
-        if artist_usage[artist] >= soft_limit:
-            rejected["soft_artist_penalty"] += 1
-        artist_usage[artist] += 1
-        output.append(row)
+    chosen = set()
+    # First pass: maximize artist coverage. Second pass: allow up to five
+    # tracks per artist if there is still room in the candidate budget.
+    for cap in (2, 5):
+        for _, _, row in ranked:
+            key = discovery_novelty.track_key(row)
+            artist = key[0]
+            if key in chosen:
+                continue
+            if artist_usage[artist] >= cap:
+                if cap == 5:
+                    rejected["artist_cap"] += 1
+                continue
+            chosen.add(key)
+            artist_usage[artist] += 1
+            output.append(row)
+            if len(output) >= limit:
+                break
         if len(output) >= limit:
             break
     print(f"[Tune Raider] discovery novelty: {len(candidates)} candidates -> "
