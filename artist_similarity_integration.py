@@ -144,6 +144,12 @@ def _novelty_order(candidates, prompt, *, limit):
             for ref in _prompt_track_requests(prompt)}
     seen = set()
     ranked = []
+    # Broad genre prompts need stronger artist rotation; explicit song references
+    # should prioritize sonic proximity without locking into the same recordings.
+    broad = not refs
+    artist_penalty = 4.5 if broad else 2.5
+    track_penalty = 55 if broad else 45
+    rng = random.SystemRandom()
     for index, row in enumerate(candidates):
         key = discovery_novelty.track_key(row)
         if not all(key) or key in seen:
@@ -156,8 +162,9 @@ def _novelty_order(candidates, prompt, *, limit):
         # Exact recording repeats are penalized more than repeated artists.
         # A strong match can still win when fresh candidates are weak.
         score = (match * 30 + min(style, 4) * 6
-                 - track_counts[key] * 45
-                 - min(artist_counts[key[0]], 12) * 2.5)
+                 - track_counts[key] * track_penalty
+                 - min(artist_counts[key[0]], 12) * artist_penalty
+                 + rng.uniform(0, 1.5))
         ranked.append((score, index, row))
     ranked.sort(key=lambda item: (-item[0], item[1]))
     output = []
