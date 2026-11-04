@@ -21,7 +21,7 @@ class DiscoveryTrackFitTests(unittest.TestCase):
     def test_soft_cap_allows_more_when_diversity_exhausted(self):
         rows = [{"artist": "Band A", "title": str(i), "match": .8} for i in range(4)]
         rows += [{"artist": "Band B", "title": "One", "match": .7}]
-        with patch.object(discovery, "_history", return_value=(Counter(), Counter())), \\
+        with patch.object(discovery, "_history", return_value=(Counter(), Counter())), \
              patch.object(discovery.discovery_track_fit, "adjustment", return_value=(0, {})):
             result = discovery._novelty_order(rows, "fast psych rock", limit=5)
         self.assertEqual(len(result), 5)
@@ -35,7 +35,7 @@ class DiscoveryTrackFitTests(unittest.TestCase):
         ]
         def fit(prompt, artist, title):
             return (-20, {}) if title == "Slow" else (20, {})
-        with patch.object(discovery, "_history", return_value=(Counter(), Counter())), \\
+        with patch.object(discovery, "_history", return_value=(Counter(), Counter())), \
              patch.object(discovery.discovery_track_fit, "adjustment", side_effect=fit):
             result = discovery._novelty_order(rows, "fast abrasive rock", limit=2)
         self.assertEqual(result[0]["title"], "Fast")
