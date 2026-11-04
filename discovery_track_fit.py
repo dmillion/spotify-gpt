@@ -22,7 +22,7 @@ def adjustment(prompt, artist, title):
         return 0.0, {}
     tags = set(sonic_ranking.track_tags(artist, title))
     if not tags:
-        return 0.0, {}
+        return 0.0, {"status": "no_track_tags"}
     hits, conflicts = {}, {}
     for dimension in ("speed", "drive", "abrasion", "psych", "genre"):
         if not active[dimension]:
@@ -39,4 +39,4 @@ def adjustment(prompt, artist, title):
                  "psych": 5, "genre": 3}[key] for key in hits)
     penalty = sum({"speed": 15, "drive": 9, "abrasion": 10}[key]
                   for key in conflicts)
-    return float(min(30, bonus) - min(25, penalty)), {"positive": hits, "conflicts": conflicts}
+    return float(min(30, bonus) - min(25, penalty)), {"status": "matched" if hits or conflicts else "unrelated_tags", "positive": hits, "conflicts": conflicts}
