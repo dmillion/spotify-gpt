@@ -19,7 +19,7 @@ SIGNALS = {
     "psych": {"psychedelic", "psychedelic rock", "psych rock", "krautrock", "space rock", "motorik"},
     "genre": {"garage rock", "garage punk", "psychedelic rock", "psych rock", "heavy psych", "acid rock"},
 }
-WEIGHTS = {"drive": 25, "speed": 20, "abrasion": 20, "psych": 15, "duration": 10, "genre": 10}
+WEIGHTS = {"drive": 25, "speed": 20, "abrasion": 20, "psych": 15, "duration": 3, "genre": 10}
 
 
 def intent(prompt):
@@ -71,6 +71,9 @@ def score(prompt, track, *, tags=None):
     if "duration" in evidence:
         minutes = evidence["duration"]
         points += WEIGHTS["duration"] * max(0, min(1, (minutes - 3) / 4))
+    if "duration" in evidence and len(evidence) == 1:
+        # Duration is not a proxy for speed, loudness, or guitar intensity.
+        points = min(points, 1.5)
     return round(points, 2), evidence
 
 
@@ -78,16 +81,22 @@ def rank(prompt, tracks):
     references = {(artist_key(ref.artist), norm(ref.title))
                   for ref in _prompt_track_requests(prompt)}
     indexed = []
+    evidence_counts = {"references": 0, "track_tags": 0, "duration_only": 0, "unknown": 0}
     for index, track in enumerate(tracks):
         artist = str(((track.get("artists") or [{}])[0]).get("name") or "")
         key = (artist_key(artist), norm(track.get("name")))
         if key in references:
+            evidence_counts["references"] += 1
             indexed.append((0, index, track))
             continue
         points, evidence = score(prompt, track)
+        evidence_counts["track_tags" if any(k != "duration" for k in evidence) else
+                        "duration_only" if evidence else "unknown"] += 1
         indexed.append((1, -points, index, track))
         print(f"[Tune Raider] sonic: {artist} - {track.get('name')}: "
               f"score={points}, evidence={evidence or 'unknown'}", flush=True)
     # Explicit anchors first, then evidence scores; original model order breaks ties.
+    print(f"[Tune Raider] sonic evidence coverage: {evidence_counts}; "
+          f"total_resolved={len(tracks)}", flush=True)
     indexed.sort(key=lambda row: row[:2] if len(row) == 3 else row[:3])
     return [row[-1] for row in indexed]
