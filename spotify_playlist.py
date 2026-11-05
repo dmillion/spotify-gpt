@@ -411,11 +411,34 @@ def search_track(token: str, requested: TrackRequest) -> dict | None:
         if candidates and max(track_score(t, requested) for t in candidates.values()) >= 0.95:
             break
 
-    if not candidates:
-        return None
+    if candidates:
+        best = max(candidates.values(), key=lambda track: track_score(track, requested))
+        if track_score(best, requested) >= 0.72:
+            return best
 
-    best = max(candidates.values(), key=lambda track: track_score(track, requested))
-    return best if track_score(best, requested) >= 0.72 else None
+    # One bounded fallback for recordings that Spotify fails to find using
+    # artist-qualified searches. Require both artist and title similarity to
+    # avoid matching a cover or an unrelated song with the same title.
+    response = api_request(
+        "GET", "/search", token,
+        params={"q": f'track:"{requested.title}"', "type": "track", "limit": 20},
+    )
+    for item in response.json().get("tracks", {}).get("items", []):
+        if item.get("id"):
+            candidates[item["id"]] = item
+    matches = [
+        track for track in candidates.values()
+        if similarity(track.get("name", ""), requested.title) >= 0.88
+        and max((similarity(a.get("name", ""), requested.artist)
+                 for a in track.get("artists", [])), default=0.0) >= 0.85
+    ]
+    if matches:
+        best = max(matches, key=lambda track: track_score(track, requested))
+        print(f"[Tune Raider] Spotify title fallback matched: "
+              f"{requested.artist} - {requested.title} -> "
+              f"{best.get('name')}", flush=True)
+        return best
+    return None
 
 
 def search_tracks_by_title_term(
