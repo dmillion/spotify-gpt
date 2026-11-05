@@ -92,7 +92,9 @@ def rank(prompt, tracks):
         points, evidence = score(prompt, track)
         evidence_counts["track_tags" if any(k != "duration" for k in evidence) else
                         "duration_only" if evidence else "unknown"] += 1
-        indexed.append((1, -points, index, track))
+        # Duration alone is not sonic evidence: preserve model order in that case.
+        sonic_points = points if any(k != "duration" for k in evidence) else 0
+        indexed.append((1, -sonic_points, index, track))
         print(f"[Tune Raider] sonic: {artist} - {track.get('name')}: "
               f"score={points}, evidence={evidence or 'unknown'}", flush=True)
     # Explicit anchors first, then evidence scores; original model order breaks ties.
