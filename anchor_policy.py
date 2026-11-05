@@ -54,26 +54,44 @@ def _excluded_keys(excluded_tracks) -> set[tuple[str, str]]:
     return result
 
 
-def _prompt_track_request(prompt: str) -> spotify.TrackRequest | None:
-    """Extract common explicit `track by artist` inspiration phrasing."""
+def _prompt_track_requests(prompt: str) -> list[spotify.TrackRequest]:
+    """Extract quoted track references sharing an explicit BY artist clause."""
     text = " ".join(str(prompt or "").split())
-    if not text:
-        return None
-
-    patterns = [
-        r"(?:songs?|tracks?|music)\s+like\s+[\"']?(?P<title>.+?)[\"']?\s+by\s+(?P<artist>.+?)(?=\s+(?:where|with|that|which|because|but|and\s+there|and\s+it)\b|[,.;]|$)",
-        r"(?:like|similar\s+to|based\s+on|inspired\s+by)\s+[\"']?(?P<title>.+?)[\"']?\s+by\s+(?P<artist>.+?)(?=\s+(?:where|with|that|which|because|but|and\s+there|and\s+it)\b|[,.;]|$)",
-        r"[\"']?(?P<title>[A-Z0-9][^,;]{1,80}?)[\"']?\s+by\s+(?P<artist>[A-Z0-9][^,;]{1,80}?)(?=\s+(?:where|with|that|which|because|but)\b|[,.;]|$)",
+    clause = re.search(
+        r"(?:songs?|tracks?|music)\s+(?:more\s+)?like\s+(?P<titles>.+?)\s+by\s+"
+        r"(?P<artist>.+?)(?=\s*[,;.]|\s+\b(?:long|fast|heavy|abrasive|with|that|which|where|but|prefer|avoid)\b|$)",
+        text, flags=re.IGNORECASE,
+    )
+    if not clause:
+        return []
+    artist = clause.group("artist").strip(" \"'“”‘’")
+    titles = [
+        match.group("title").strip()
+        for match in re.finditer(r"(?P<quote>['\"“‘])(?P<title>.+?)(?P=quote)", clause.group("titles"))
     ]
-    for pattern in patterns:
-        match = re.search(pattern, text, flags=re.IGNORECASE)
-        if not match:
-            continue
-        title = match.group("title").strip(" \"'“”‘’")
-        artist = match.group("artist").strip(" \"'“”‘’")
-        if title and artist and len(title) <= 120 and len(artist) <= 120:
-            return spotify.TrackRequest(artist=artist, title=title)
-    return None
+    if not titles or not artist or len(artist) > 120:
+        return []
+    return [spotify.TrackRequest(artist=artist, title=title) for title in titles if title]
+
+
+def _prompt_track_request(prompt: str) -> spotify.TrackRequest | None:
+    """Backward-compatible accessor for a single inspiration reference."""
+    references = _prompt_track_requests(prompt)
+    if references:
+        return references[0]
+    text = " ".join(str(prompt or "").split())
+    match = re.search(
+        r"(?:like|similar\s+to|based\s+on|inspired\s+by)\s+"
+        r"(?P<title>.+?)\s+by\s+(?P<artist>.+?)(?=[,;.]|$)",
+        text, flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+    title = match.group("title").strip(" \"'“”‘’")
+    artist = match.group("artist").strip(" \"'“”‘’")
+    if not title or not artist or len(title) > 120 or len(artist) > 120:
+        return None
+    return spotify.TrackRequest(artist=artist, title=title)
 
 
 def _prompt_artist_name(prompt: str) -> str | None:
@@ -82,6 +100,9 @@ def _prompt_artist_name(prompt: str) -> str | None:
     The result is only a candidate. Spotify must still confirm an exact artist
     match before Tune Raider inserts one of that artist's tracks.
     """
+    references = _prompt_track_requests(prompt)
+    if references:
+        return references[0].artist
     text = " ".join(str(prompt or "").split())
     if not text:
         return None
@@ -342,6 +363,31 @@ def ensure_prompt_anchor(
 ) -> dict:
     """Guarantee a resolvable prompt inspiration survives curation when possible."""
     tracks = _load_tracks(database_path)
+    references = _prompt_track_requests(prompt)
+    if references:
+        # Explicit references are required even if excluded by novelty history.
+        # Remove other tracks by the reference artist first, preserving the
+        # requested songs and leaving the remaining slots for discovery.
+        keys = {(_normalize(ref.artist), _normalize(ref.title)) for ref in references}
+        artists = {_normalize(ref.artist) for ref in references}
+        selected = [
+            track for track in (generated.get("tracks") or [])
+            if _normalize(track.get("artist")) not in artists
+            and (_normalize(track.get("artist")), _normalize(track.get("title"))) not in keys
+        ]
+        anchors = []
+        for ref in references:
+            key = (_normalize(ref.artist), _normalize(ref.title))
+            if any((_normalize(item["artist"]), _normalize(item["title"])) == key for item in anchors):
+                continue
+            anchors.append({"artist": ref.artist, "title": ref.title, "source": "prompt-anchor"})
+        generated["tracks"] = (anchors + selected)[:max(len(anchors), track_limit)]
+        generated["description"] = (
+            "Built around " + ", ".join(ref.title for ref in references)
+            + " by " + references[0].artist
+            + "; exploring related artists while prioritizing the requested musical characteristics."
+        )
+        return generated
     anchor = _find_anchor(prompt, tracks, excluded_tracks)
     selected = list(generated.get("tracks") or [])
 

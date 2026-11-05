@@ -6,6 +6,8 @@ from musical_similarity import emphasis, rank
 from sound_selection import filter_selection
 import bandcamp_discovery
 import json
+import os
+from collections import Counter
 import sqlite3
 
 
@@ -95,16 +97,36 @@ def install(ns: dict) -> None:
             if not isinstance(payload, dict) or not isinstance(payload.get("tracks"), list):
                 raise ValueError("The model returned an invalid hybrid playlist.")
             selected = []; seen = set(); artist_counts = {}
+            rejected = Counter()
+            requested_ids = []
+            capped_artists = Counter()
             for item in payload["tracks"]:
                 cid = str(item.get("candidate_id") or "") if isinstance(item, dict) else ""
                 candidate = candidate_map.get(cid)
-                if not candidate: continue
+                if not candidate:
+                    rejected["invalid_id"] += 1
+                    continue
+                requested_ids.append(cid)
                 key = (candidate["artist"].casefold(), candidate["title"].casefold())
                 artist_key = candidate["artist"].casefold()
-                if key in seen or artist_counts.get(artist_key, 0) >= ns["PLAYLIST_ARTIST_LIMIT"]: continue
+                if key in seen:
+                    rejected["duplicate"] += 1
+                    continue
+                if artist_counts.get(artist_key, 0) >= ns["PLAYLIST_ARTIST_LIMIT"]:
+                    rejected["artist_cap"] += 1
+                    capped_artists[candidate["artist"]] += 1
+                    continue
                 seen.add(key); artist_counts[artist_key] = artist_counts.get(artist_key, 0) + 1
                 selected.append(candidate)
                 if len(selected) >= ns["PLAYLIST_TRACK_LIMIT"]: break
+            print(f"[Tune Raider] model curation funnel: offered={len(model_candidates)} "
+                  f"model_returned={len(payload['tracks'])} valid_ids={len(requested_ids)} "
+                  f"accepted={len(selected)} rejected={dict(rejected)} "
+                  f"artist_cap_breakdown={dict(capped_artists.most_common(12))}", flush=True)
+            if os.environ.get("DISCOVERY_DEBUG", "0").lower() in ("1", "true", "yes", "on"):
+                for cid in requested_ids[:30]:
+                    row = candidate_map[cid]
+                    print(f"[Tune Raider] model picked: {cid} {row['artist']} / {row['title']}", flush=True)
             selected, low_fit = filter_selection(prompt, selected, model_candidates)
             if low_fit:
                 print(f"[Tune Raider] removed {len(low_fit)} low-fit measured candidates: "

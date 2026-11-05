@@ -6,6 +6,8 @@ import instrumental_discovery
 import lyric_theme
 import lrclib_client
 import spotify_history_reconcile
+import discovery_novelty
+import sonic_ranking
 from playlist_prompt_metadata import spotify_description
 
 import json
@@ -59,6 +61,20 @@ def install(ns: dict) -> None:
                 stage_callback(name)
 
         ns["require_configuration"]()
+        if os.environ.get("DISCOVERY_DEBUG", "0").strip().lower() in {"1", "true", "yes", "on"}:
+            import subprocess
+            try:
+                revision = subprocess.run(
+                    ["git", "rev-parse", "--short", "HEAD"],
+                    cwd=os.path.dirname(__file__), capture_output=True, text=True,
+                    timeout=2, check=True,
+                ).stdout.strip()
+            except (OSError, subprocess.SubprocessError):
+                revision = "unknown"
+            print(f"[Tune Raider] runtime: revision={revision} "
+                  f"curator={ns['ask_for_hybrid_playlist'].__module__}."
+                  f"{ns['ask_for_hybrid_playlist'].__name__} "
+                  f"pid={os.getpid()}", flush=True)
         stage("curation")
         try:
             if requires_instrumental(prompt):
@@ -73,6 +89,14 @@ def install(ns: dict) -> None:
             print("[Tune Raider] CURATION EXCEPTION TRACEBACK:\n" + traceback.format_exc(), flush=True)
             _stage_error("curation", "Playlist curation failed", exc)
 
+        if not requires_instrumental(prompt):
+            try:
+                with ns["database"]() as connection:
+                    generated = discovery_novelty.curate(prompt, generated, connection)
+            except Exception as exc:
+                # History must never prevent playlist creation.
+                print(f"[Tune Raider] novelty history unavailable: {exc}", flush=True)
+
         stage("spotify_auth")
         try:
             token = spotify.get_access_token()
@@ -83,6 +107,7 @@ def install(ns: dict) -> None:
         resolved = []
         missing = []
         seen_uris = set()
+        resolution_stats = {"requested": 0, "resolved": 0, "missing": 0, "duplicate_uri": 0}
         all_candidates = list(generated["tracks"])
         strict = requires_instrumental(prompt)
         verified_tracks = []
@@ -152,13 +177,18 @@ def install(ns: dict) -> None:
                         candidates = list(all_candidates)
                 new_resolved = []
                 for requested in candidates:
+                    resolution_stats["requested"] += 1
                     req = spotify.TrackRequest(requested["artist"], requested["title"])
                     track = spotify.search_track(token, req)
                     if track and track.get("uri") not in seen_uris:
                         resolved.append(track)
                         new_resolved.append(track)
+                        resolution_stats["resolved"] += 1
                         seen_uris.add(track["uri"])
-                    elif not track:
+                    elif track:
+                        resolution_stats["duplicate_uri"] += 1
+                    else:
+                        resolution_stats["missing"] += 1
                         missing.append(f"{requested['artist']} - {requested['title']}")
                 if strict:
                     # Evaluate each Spotify recording once; previous rounds are
@@ -173,6 +203,8 @@ def install(ns: dict) -> None:
         except Exception as exc:
             _stage_error("spotify_resolution", "Spotify track resolution failed", exc)
 
+        print(f"[Tune Raider] Spotify resolution funnel: {resolution_stats} "
+              f"unique_resolved={len(resolved)} missing_examples={missing[:8]}", flush=True)
         if strict:
             resolved = verified_tracks
             if not resolved:
@@ -185,7 +217,10 @@ def install(ns: dict) -> None:
                     ),
                 )
         else:
+            before_constraints = len(resolved)
             resolved, constraint_rejections = enforce_resolved(prompt, resolved)
+            print(f"[Tune Raider] resolved constraints: before={before_constraints} "
+                  f"after={len(resolved)} rejected={len(constraint_rejections)}", flush=True)
             if lyric_theme.intent(prompt):
                 stage("lyric_verification")
                 resolved, lyrical_rejections = lyric_theme.verify(prompt, resolved, ns["model_json"])
@@ -248,6 +283,9 @@ def install(ns: dict) -> None:
                   flush=True)
             resolved = balanced
         else:
+            if sonic_ranking.intent(prompt) and any(sonic_ranking.intent(prompt).values()):
+                stage("sonic_ranking")
+                resolved = sonic_ranking.rank(prompt, resolved)
             resolved = resolved[:ns["PLAYLIST_TRACK_LIMIT"]]
         generated["tracks"] = all_candidates
         if strict:
