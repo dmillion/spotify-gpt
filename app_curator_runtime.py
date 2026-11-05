@@ -99,6 +99,7 @@ def install(ns: dict) -> None:
             selected = []; seen = set(); artist_counts = {}
             rejected = Counter()
             requested_ids = []
+            capped_artists = Counter()
             for item in payload["tracks"]:
                 cid = str(item.get("candidate_id") or "") if isinstance(item, dict) else ""
                 candidate = candidate_map.get(cid)
@@ -113,14 +114,16 @@ def install(ns: dict) -> None:
                     continue
                 if artist_counts.get(artist_key, 0) >= ns["PLAYLIST_ARTIST_LIMIT"]:
                     rejected["artist_cap"] += 1
+                    capped_artists[candidate["artist"]] += 1
                     continue
                 seen.add(key); artist_counts[artist_key] = artist_counts.get(artist_key, 0) + 1
                 selected.append(candidate)
                 if len(selected) >= ns["PLAYLIST_TRACK_LIMIT"]: break
+            print(f"[Tune Raider] model curation funnel: offered={len(model_candidates)} "
+                  f"model_returned={len(payload['tracks'])} valid_ids={len(requested_ids)} "
+                  f"accepted={len(selected)} rejected={dict(rejected)} "
+                  f"artist_cap_breakdown={dict(capped_artists.most_common(12))}", flush=True)
             if os.environ.get("DISCOVERY_DEBUG", "0").lower() in ("1", "true", "yes", "on"):
-                print(f"[Tune Raider] model curation funnel: offered={len(model_candidates)} "
-                      f"model_returned={len(payload['tracks'])} valid_ids={len(requested_ids)} "
-                      f"accepted={len(selected)} rejected={dict(rejected)}", flush=True)
                 for cid in requested_ids[:30]:
                     row = candidate_map[cid]
                     print(f"[Tune Raider] model picked: {cid} {row['artist']} / {row['title']}", flush=True)
