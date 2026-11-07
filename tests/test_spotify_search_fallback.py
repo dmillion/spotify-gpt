@@ -32,6 +32,19 @@ class SpotifySearchFallbackTests(unittest.TestCase):
         with patch.object(spotify, "api_request", side_effect=search):
             self.assertIsNone(spotify.search_track("token", requested))
 
+    def test_fallback_api_error_does_not_abort_resolution(self):
+        requested = spotify.TrackRequest("Band", "Missing")
+        calls = []
+        def search(method, path, token, params):
+            calls.append(params)
+            if params["q"] == 'track:"Missing"':
+                raise spotify.SpotifyError("Spotify API HTTP 400: Invalid limit")
+            return type("Response", (), {"json": lambda self: {"tracks": {"items": []}}})()
+        with patch.object(spotify, "api_request", side_effect=search):
+            self.assertIsNone(spotify.search_track("token", requested))
+        self.assertEqual(len(calls), 3)
+        self.assertTrue(all(call["limit"] <= 10 for call in calls))
+
     def test_successful_primary_search_skips_fallback(self):
         requested = spotify.TrackRequest("Band", "Song")
         with patch.object(spotify, "api_request") as request:
