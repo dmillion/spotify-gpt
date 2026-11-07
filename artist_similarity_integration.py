@@ -8,6 +8,13 @@ new external music rather than recycle whatever happens to be indexed locally.
 from __future__ import annotations
 
 from contextvars import ContextVar
+import random
+import os
+from collections import Counter
+
+import discovery_novelty
+import discovery_track_fit
+from anchor_policy import _prompt_track_requests
 
 import requests
 
@@ -20,6 +27,7 @@ _original_enrich_library_plan = tone_raider.enrich_library_plan
 _original_external_candidates = tone_raider.lastfm_external_candidates
 _original_ask_for_hybrid_playlist = tone_raider.ask_for_hybrid_playlist
 _prompt_anchor_artist: ContextVar[str] = ContextVar("prompt_anchor_artist", default="")
+_active_discovery_prompt: ContextVar[str] = ContextVar("active_discovery_prompt", default="")
 
 # Broad umbrella tags are weak evidence by themselves. A single overlap like
 # "folk" or "rock" must not be enough to drag a playlist into an unrelated scene.
@@ -117,72 +125,222 @@ def enrich_library_plan_with_anchor_styles(plan: dict, library) -> dict:
     return enriched
 
 
+def _debug():
+    return os.environ.get("DISCOVERY_DEBUG", "0").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _history():
+    """Historical selections inform novelty, without excluding viable recordings."""
+    try:
+        with tone_raider.database() as connection:
+            return discovery_novelty.history_counts(connection)
+    except Exception as exc:
+        print(f"[Tune Raider] discovery history unavailable: {exc}", flush=True)
+        return Counter(), Counter()
+
+
+def _novelty_order(candidates, prompt, *, limit):
+    """Rank before model curation; emphasize track freshness over artist familiarity.
+
+    Novelty is a tie-breaker for strongly related songs, not a hard blacklist.
+    Generic genre prompts receive the same history protection.
+    """
+    track_counts, artist_counts = _history()
+    refs = {(discovery_novelty.artist_key(ref.artist), discovery_novelty.norm(ref.title))
+            for ref in _prompt_track_requests(prompt)}
+    seen = set()
+    ranked = []
+    rejected = Counter()
+    # Broad genre prompts need stronger artist rotation; explicit song references
+    # should prioritize sonic proximity without locking into the same recordings.
+    broad = not refs
+    artist_penalty = 4.5 if broad else 2.5
+    track_penalty = 55 if broad else 45
+    rng = random.SystemRandom()
+    for index, row in enumerate(candidates):
+        key = discovery_novelty.track_key(row)
+        if not all(key):
+            rejected["invalid"] += 1
+            continue
+        if key in seen:
+            rejected["duplicate"] += 1
+            continue
+        seen.add(key)
+        if key in refs:
+            rejected["reference"] += 1
+            continue  # Anchor policy adds mandatory references separately.
+        match = max(0.0, min(1.0, float(row.get("match") or 0.0)))
+        style = len(row.get("style_overlap") or [])
+        # Exact recording repeats are penalized more than repeated artists.
+        # A strong match can still win when fresh candidates are weak.
+        # Artist-level similarity is only a discovery lead, not track-level fit.
+        score = (match * 16 + min(style, 4) * 3
+                 - track_counts[key] * track_penalty
+                 - min(artist_counts[key[0]], 12) * artist_penalty
+                 + rng.uniform(0, 1.5))
+        # Explicit reference-track neighbors carry stronger song-level evidence.
+        if str(row.get("relationship") or "").startswith("track neighbor of "):
+            score += 13
+        ranked.append((score, index, row))
+    ranked.sort(key=lambda item: (-item[0], item[1]))
+    # Request track tags only for the strongest leads, not every discovered song.
+    # This limits added Last.fm requests and prevents an unbounded latency increase.
+    if any(discovery_track_fit.sonic_ranking.intent(prompt).values()):
+        reranked = []
+        for position, (score, index, row) in enumerate(ranked):
+            evidence = {}
+            if position < 32:
+                delta, evidence = discovery_track_fit.adjustment(
+                    prompt, row.get("artist", ""), row.get("title", ""))
+                score += delta
+            if evidence and _debug():
+                print(f"[Tune Raider] discovery track fit: {row.get('artist')} / "
+                      f"{row.get('title')} adjustment={delta:+.1f} evidence={evidence}", flush=True)
+            reranked.append((score, index, row))
+        ranked = sorted(reranked, key=lambda item: (-item[0], item[1]))
+    output = []
+    artist_usage = Counter()
+    chosen = set()
+    # First pass: maximize artist coverage. Second pass: allow up to five
+    # tracks per artist if there is still room in the candidate budget.
+    for cap in (2, 5):
+        for _, _, row in ranked:
+            key = discovery_novelty.track_key(row)
+            artist = key[0]
+            if key in chosen:
+                continue
+            if artist_usage[artist] >= cap:
+                if cap == 5:
+                    rejected["artist_cap"] += 1
+                continue
+            chosen.add(key)
+            artist_usage[artist] += 1
+            output.append(row)
+            if len(output) >= limit:
+                break
+        if len(output) >= limit:
+            break
+    print(f"[Tune Raider] discovery novelty: {len(candidates)} candidates -> "
+          f"{len(output)}; {sum(track_counts[discovery_novelty.track_key(t)] > 0 for t in output)} historical repeats",
+          flush=True)
+    if _debug():
+        print(f"[Tune Raider] discovery funnel: scored={len(ranked)} selected={len(output)} "
+              f"budget={limit} rejected={dict(rejected)}", flush=True)
+        chosen = {discovery_novelty.track_key(row) for row in output}
+        for score_value, _, row in ranked[:12]:
+            key = discovery_novelty.track_key(row)
+            print(f"[Tune Raider] discovery ranked: {row.get('artist')} / {row.get('title')} "
+                  f"score={score_value:.1f} match={row.get('match', 0)} "
+                  f"history={track_counts[key]} artist_history={artist_counts[key[0]]} "
+                  f"selected={key in chosen}", flush=True)
+        missed = [row for _, _, row in ranked if discovery_novelty.track_key(row) not in chosen]
+        for row in missed[:12]:
+            print(f"[Tune Raider] discovery missed: {row.get('artist')} / {row.get('title')} "
+                  f"reason=artist_cap_or_budget", flush=True)
+    return output
+
+
 def _direct_similarity_candidates(anchor: str, excluded_tracks=None, *, limit: int = 12) -> list[dict]:
+    """Blend reference-track neighbors with artist neighbors, ranked for novelty.
+
+    The Last.fm request budget is bounded; no additional model calls are made.
+    """
     if not anchor or not lastfm.API_KEY or limit <= 0:
         return []
-
+    prompt = _active_discovery_prompt.get()
     excluded = tone_raider.excluded_track_keys(excluded_tracks)
     seen = set(excluded)
-    result: list[dict] = []
+    pool = []
     anchor_styles = _anchor_style_profile(anchor)
+    rng = random.SystemRandom()
+    max_pool = min(100, max(limit * 3, 40))
+    stats = Counter()
 
-    def add(artist: str, title: str, relationship: str, match: float | None = None, style_overlap=None) -> None:
+    def add(artist, title, relationship, match=0.0, overlap=None):
         artist = str(artist or "").strip()
         title = str(title or "").strip()
         key = (_normalize(artist), _normalize(title))
-        if not key[0] or not key[1] or key in seen or len(result) >= limit:
+        if not all(key):
+            stats["invalid"] += 1
+            return
+        if key in seen:
+            stats["duplicate_or_excluded"] += 1
+            return
+        if len(pool) >= max_pool:
+            stats["pool_full"] += 1
+            return
+        if _normalize(artist) == _normalize(anchor):
+            stats["anchor_artist"] += 1
             return
         seen.add(key)
-        row = {
-            "artist": artist,
-            "title": title,
-            "source": "lastfm",
-            "relationship": relationship,
-            "anchor_artist": anchor,
-        }
-        if anchor_styles:
-            row["anchor_styles"] = anchor_styles[:8]
-        if style_overlap:
-            row["style_overlap"] = list(style_overlap)[:6]
-        if match is not None:
-            row["match"] = round(float(match), 4)
-        result.append(row)
+        stats["pooled"] += 1
+        pool.append({
+            "artist": artist, "title": title, "source": "lastfm",
+            "relationship": relationship, "anchor_artist": anchor,
+            "match": round(float(match or 0), 4),
+            "style_overlap": list(overlap or [])[:6],
+        })
+
+    # Track-level neighbors expand beyond the same artist similarity cluster.
+    for ref in _prompt_track_requests(prompt)[:3]:
+        try:
+            for item in lastfm.similar_tracks(ref.artist, ref.title, limit=50):
+                artist = str(item.get("artist") or "")
+                match = float(item.get("match") or 0)
+                if match < 0.12:
+                    stats["track_low_similarity"] += 1
+                    continue
+                style_score, overlap = _neighbor_style_score(anchor_styles, artist)
+                if anchor_styles and not (style_score > 0 or match >= 0.65):
+                    stats["track_style_rejected"] += 1
+                    continue
+                add(artist, item.get("title"), f"track neighbor of {ref.title}",
+                    match, overlap)
+        except (requests.RequestException, RuntimeError, ValueError) as exc:
+            print(f"[Tune Raider] reference-track discovery unavailable: {exc}", flush=True)
 
     try:
-        for title in lastfm.top_tracks(anchor, limit=2):
-            add(anchor, title, f"track by prompt anchor {anchor}", style_overlap=anchor_styles[:6])
-
         ranked_neighbors = []
-        for neighbor in lastfm.similar_artists(anchor, limit=24):
+        for neighbor in lastfm.similar_artists(anchor, limit=50):
             match = float(neighbor.get("match") or 0)
             if match < 0.10:
+                stats["artist_low_similarity"] += 1
                 continue
             name = str(neighbor.get("name") or "").strip()
             if not name:
                 continue
             style_score, overlap = _neighbor_style_score(anchor_styles, name)
-            specific_overlap = [tag for tag in overlap if _style_key(tag) not in _GENERIC_STYLE_TAGS]
-
-            if anchor_styles and not (specific_overlap or len(overlap) >= 2 or match >= 0.65):
+            specific = [tag for tag in overlap if _style_key(tag) not in _GENERIC_STYLE_TAGS]
+            if anchor_styles and not (specific or len(overlap) >= 2 or match >= 0.65):
+                stats["artist_style_rejected"] += 1
                 continue
-            combined = match + style_score
-            ranked_neighbors.append((combined, match, name, overlap))
-
+            ranked_neighbors.append((match + style_score, match, name, overlap))
+            stats["eligible_artists"] += 1
         ranked_neighbors.sort(key=lambda row: row[0], reverse=True)
-        for _combined, match, name, overlap in ranked_neighbors:
-            relationship = f"style-matched neighbor of {anchor}"
-            if overlap:
-                relationship += f"; shared styles: {', '.join(overlap[:4])}"
-            for title in lastfm.top_tracks(name, limit=3):
-                add(name, title, relationship, match, overlap)
-                if len(result) >= limit:
-                    break
-            if len(result) >= limit:
+        neighbors = []
+        for index in range(0, len(ranked_neighbors), 8):
+            band = ranked_neighbors[index:index + 8]
+            rng.shuffle(band)
+            neighbors.extend(band)
+        # Cap top-track requests to avoid long discovery stalls.
+        for _combined, match, name, overlap in neighbors[:35]:
+            if len(pool) >= max_pool:
                 break
-    except (requests.RequestException, RuntimeError, ValueError):
-        return result
+            try:
+                titles = list(lastfm.top_tracks(name, limit=15))
+            except (requests.RequestException, RuntimeError, ValueError):
+                continue
+            stats["queried_artists"] += 1
+            rng.shuffle(titles)
+            for title in titles[:3]:
+                add(name, title, f"style-matched neighbor of {anchor}", match, overlap)
+    except (requests.RequestException, RuntimeError, ValueError) as exc:
+        print(f"[Tune Raider] artist-neighbor discovery unavailable: {exc}", flush=True)
 
-    return result
+    if _debug():
+        print(f"[Tune Raider] discovery source funnel: pool={len(pool)}/{max_pool} "
+              f"counters={dict(stats)}", flush=True)
+    return _novelty_order(pool, prompt, limit=limit)
 
 
 def external_candidates_with_prompt_anchor(plan: dict, local_candidates: list[dict], excluded_tracks=None) -> list[dict]:
@@ -190,9 +348,9 @@ def external_candidates_with_prompt_anchor(plan: dict, local_candidates: list[di
     anchor = _prompt_anchor_artist.get().strip()
     budget = max(0, tone_raider.OLLAMA_EXTERNAL_CANDIDATE_LIMIT)
     if not anchor or budget == 0:
-        return existing
+        return _novelty_order(existing, _active_discovery_prompt.get(), limit=budget) if budget else existing
 
-    direct_budget = min(28, max(12, int(round(budget * 0.75))))
+    direct_budget = min(28, max(8, int(round(budget * 0.50))))
     direct = _direct_similarity_candidates(anchor, excluded_tracks, limit=direct_budget)
     if not direct:
         return existing
@@ -212,7 +370,7 @@ def external_candidates_with_prompt_anchor(plan: dict, local_candidates: list[di
         f"[Tune Raider] prompt anchor {anchor!r}: reserved {len(direct)} style-matched external candidates",
         flush=True,
     )
-    return merged
+    return _novelty_order(merged, _active_discovery_prompt.get(), limit=budget)
 
 
 def _discovery_first_result(prompt: str, generated: dict, excluded_tracks=None) -> dict:
@@ -300,6 +458,7 @@ def _discovery_first_result(prompt: str, generated: dict, excluded_tracks=None) 
 def ask_for_hybrid_playlist_with_prompt_anchor(prompt: str, excluded_tracks=None) -> dict:
     anchor = _prompt_artist_name(prompt) or ""
     token = _prompt_anchor_artist.set(anchor)
+    prompt_token = _active_discovery_prompt.set(prompt)
     original_local_limit = tone_raider.OLLAMA_LOCAL_CANDIDATE_LIMIT
     original_external_limit = tone_raider.OLLAMA_EXTERNAL_CANDIDATE_LIMIT
     try:
@@ -314,6 +473,7 @@ def ask_for_hybrid_playlist_with_prompt_anchor(prompt: str, excluded_tracks=None
     finally:
         tone_raider.OLLAMA_LOCAL_CANDIDATE_LIMIT = original_local_limit
         tone_raider.OLLAMA_EXTERNAL_CANDIDATE_LIMIT = original_external_limit
+        _active_discovery_prompt.reset(prompt_token)
         _prompt_anchor_artist.reset(token)
 
 

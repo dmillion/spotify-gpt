@@ -220,6 +220,7 @@ def ask_for_hybrid_playlist_with_safeguards(prompt: str, excluded_tracks=None) -
     if previous:
         print(f"[Tune Raider] avoiding {len(previous)} previously selected tracks for this prompt", flush=True)
     generated = _original_ask_for_hybrid_playlist(prompt, exclusions)
+    print(f"[Tune Raider] safeguard funnel: initial={len(generated.get('tracks') or [])}", flush=True)
     generated = apply_request_constraints(
         prompt,
         generated,
@@ -228,6 +229,8 @@ def ask_for_hybrid_playlist_with_safeguards(prompt: str, excluded_tracks=None) -
         artist_limit=tone_raider.PLAYLIST_ARTIST_LIMIT,
     )
 
+    print(f"[Tune Raider] safeguard funnel: after_request_constraints="
+          f"{len(generated.get('tracks') or [])}", flush=True)
     if has_title_constraint(prompt):
         generated = _supplement_title_query_from_spotify(prompt, generated, exclusions)
     else:
@@ -252,6 +255,7 @@ def ask_for_hybrid_playlist_with_safeguards(prompt: str, excluded_tracks=None) -
             "for mandatory track-level verification",
             flush=True,
         )
+    print(f"[Tune Raider] safeguard funnel: final={len(generated.get('tracks') or [])}", flush=True)
     return generated
 
 
