@@ -40,6 +40,28 @@ class SonicRankingTests(unittest.TestCase):
         self.assertEqual([t["name"] for t in result[:2]],
                          ["Dracula Drug", "Underneath You"])
 
+    def test_duration_only_preserves_curator_order(self):
+        tracks = [
+            recording("Band", "Short", 2),
+            recording("Band", "Long", 9),
+            recording("Band", "Medium", 5),
+        ]
+        with patch.object(sonic_ranking, "track_tags", return_value=()):
+            ranked = sonic_ranking.rank(PROMPT, tracks)
+        self.assertEqual([t["name"] for t in ranked],
+                         ["Short", "Long", "Medium"])
+
+    def test_track_evidence_outranks_duration_only(self):
+        tracks = [
+            recording("Band", "Long Unknown", 9),
+            recording("Band", "Fast Confirmed", 2),
+        ]
+        def tags(_artist, title):
+            return ("fast", "fuzz") if title == "Fast Confirmed" else ()
+        with patch.object(sonic_ranking, "track_tags", side_effect=tags):
+            ranked = sonic_ranking.rank(PROMPT, tracks)
+        self.assertEqual(ranked[0]["name"], "Fast Confirmed")
+
     def test_missing_evidence_does_not_invent_tempo(self):
         score, evidence = sonic_ranking.score(
             PROMPT, recording("Unknown", "Unknown", 4), tags=[])
