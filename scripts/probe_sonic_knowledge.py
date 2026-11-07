@@ -8,7 +8,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
+
+# Allow direct execution from scripts/ without requiring PYTHONPATH.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import app
 
