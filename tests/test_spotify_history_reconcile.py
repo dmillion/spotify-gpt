@@ -25,7 +25,7 @@ class SpotifyHistoryReconcileTests(unittest.TestCase):
         def request(method, path, token, **kwargs):
             if path == "/me/playlists":
                 return Mock(status_code=200, json=lambda: {
-                    "total": 1, "items": [{"id": "present456"}]
+                    "total": 1, "items": [{"id": "present456", "name": "Psych Rock Progression"}]
                 })
             if path == "/playlists/deleted123":
                 raise spotify.SpotifyError("Spotify API HTTP 404 on GET /playlists/deleted123: Not found")
