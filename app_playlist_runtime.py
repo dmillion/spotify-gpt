@@ -72,8 +72,8 @@ def install(ns: dict) -> None:
             except (OSError, subprocess.SubprocessError):
                 revision = "unknown"
             print(f"[Tune Raider] runtime: revision={revision} "
-                  f"curator={ns['ask_for_hybrid_playlist'].__module__}."
-                  f"{ns['ask_for_hybrid_playlist'].__name__} "
+                  f"curator={getattr(ns['ask_for_hybrid_playlist'], '__module__', 'unknown')}."
+                  f"{getattr(ns['ask_for_hybrid_playlist'], '__name__', type(ns['ask_for_hybrid_playlist']).__name__)} "
                   f"pid={os.getpid()}", flush=True)
         stage("curation")
         try:
