@@ -2,10 +2,16 @@
 import unittest
 from unittest.mock import patch
 
+
 import artist_similarity_integration as discovery
 
 
 class DiscoveryStep3Tests(unittest.TestCase):
+    def setUp(self):
+        patcher = patch.object(discovery.discovery_track_fit, "adjustment", return_value=(0, {"status": "no_track_tags"}))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_repeat_penalty_prefers_fresh_recording(self):
         rows = [
             {"artist": "Old Band", "title": "Old Song", "match": .95},
