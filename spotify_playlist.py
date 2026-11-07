@@ -347,6 +347,14 @@ def api_request(method: str, path: str, token: str, **kwargs) -> requests.Respon
                     headers["Authorization"] = f"Bearer {refreshed['access_token']}"
                     refreshed_once = True
                     continue
+        if response.status_code in (500, 502, 503, 504) and method.upper() == "GET":
+            if attempt < 3:
+                delay = min(2 ** attempt, 8)
+                print(f"[Tune Raider] Spotify temporary HTTP {response.status_code} "
+                      f"on {method} {path}; retry {attempt + 1}/3 in {delay}s",
+                      flush=True)
+                time.sleep(delay)
+                continue
         if response.status_code == 429:
             retry_after = int(response.headers.get("Retry-After", "1"))
             if attempt < 3:
